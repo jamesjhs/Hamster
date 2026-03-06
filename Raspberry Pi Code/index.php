@@ -1,10 +1,10 @@
 <html>
 <head>
 
-<title>Diesel's Data Logger</title>
+<title>Chocolate's Data Logger</title>
 </head>
 <body>
-<H1>Diesel's Data Logger</h1>
+<H1>Chocolate's Data Logger</h1>
 
 <?php 
 

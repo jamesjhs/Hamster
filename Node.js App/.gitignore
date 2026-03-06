@@ -1,0 +1,11 @@
+# Keep the compiled Tailwind CSS out of version control (generated artifact).
+# Run `npm run build:css` to regenerate it.
+public/css/styles.css
+
+# Node modules
+node_modules/
+
+# PM2 logs / runtime files
+*.pid
+*.log
+.pm2/

@@ -66,26 +66,40 @@ async function getESP32Data() {
     'motionLevelLast', 'lastwheelmillis', 'lastmotionmillis',
   ];
 
-  // Fetch all endpoints in parallel; fall back to 0 on error
+  // Fetch all endpoints in parallel; fall back to 0 on any error
   const results = await Promise.all(endpoints.map((ep) => httpGet(`${base}/${ep}`)));
   const raw = {};
-  endpoints.forEach((ep, i) => { raw[ep] = parseFloat(results[i]) || 0; });
+  endpoints.forEach((ep, i) => {
+    const v = parseFloat(results[i]);
+    raw[ep] = isNaN(v) ? 0 : v;
+  });
+
+  // If millisnow > 0 the ESP32 responded with real uptime data.
+  raw.esp32Online = raw.millisnow > 0;
 
   // Derive timestamps:
-  // lastwheelmillis / lastmotionmillis are already the elapsed ms since the
-  // last event (the ESP32 endpoint subtracts the stored millis from millis()).
+  // lastwheelmillis / lastmotionmillis are the elapsed ms since the last event
+  // (the ESP32 endpoint subtracts the stored millis from millis()).
   const nowMs = Date.now();
   raw.lastWheelTs    = nowMs - raw.lastwheelmillis;
   raw.lastMotionTs   = nowMs - raw.lastmotionmillis;
   raw.lastActiveTs   = Math.max(raw.lastWheelTs, raw.lastMotionTs);
   raw.lastActiveMinsAgo = Math.max(0, Math.floor((nowMs - raw.lastActiveTs) / 60_000));
 
-  // Human-readable last location
-  if (raw.lastmotionmillis < raw.lastwheelmillis) {
+  // Human-readable last location.
+  // lastwheelmillis and lastmotionmillis are milliseconds since the last event;
+  // a smaller value means more recent.
+  if (!raw.esp32Online) {
+    raw.lastLocation = 'offline';
+  } else if (raw.lastwheelmillis === 0 && raw.lastmotionmillis === 0) {
+    raw.lastLocation = 'unknown';
+  } else if (raw.lastmotionmillis < raw.lastwheelmillis) {
+    // Motion event was more recent than wheel event
     const levels = { 1: 'ground level', 2: 'middle level', 3: 'top level' };
-    raw.lastLocation = levels[raw.motionLevelLast] || 'unknown level';
+    raw.lastLocation = levels[Math.round(raw.motionLevelLast)] || 'unknown level';
   } else {
-    raw.lastLocation = `wheel ${raw.wheelNumberLast === 1 ? '1 (bottom)' : '2 (top)'}`;
+    // Wheel event was more recent (or tied)
+    raw.lastLocation = `wheel ${Math.round(raw.wheelNumberLast) === 1 ? '1 (bottom)' : '2 (top)'}`;
   }
 
   // Age calculation
@@ -117,12 +131,12 @@ function readCSV(filePath) {
   }
 }
 
-/** Return list of CSV files in CSV_DIR, newest first. */
+/** Return list of daily CSV files in CSV_DIR, newest first (longtermlog.csv excluded). */
 function listCSVFiles() {
   try {
     return fs
       .readdirSync(CSV_DIR)
-      .filter((f) => f.endsWith('.csv'))
+      .filter((f) => f.endsWith('.csv') && f !== 'longtermlog.csv')
       .sort()
       .reverse();
   } catch {
@@ -248,9 +262,27 @@ app.get('/api/images', (_req, res) => {
   res.json(loadImages());
 });
 
+// API – system status (useful for debugging CSV path issues)
+app.get('/api/status', (_req, res) => {
+  const longtermPath = path.join(CSV_DIR, 'longtermlog.csv');
+  const longtermExists = fs.existsSync(longtermPath);
+  const longtermRows   = longtermExists ? readCSV(longtermPath).length : 0;
+  const dailyFiles     = listCSVFiles();
+  res.json({
+    csvDir: CSV_DIR,
+    longtermlogExists: longtermExists,
+    longtermlogRows: longtermRows,
+    dailyFileCount: dailyFiles.length,
+    dailyFiles,
+    esp32Ip: ESP32_IP,
+    cacheAgeMs: esp32Cache ? Date.now() - esp32CacheAt : null,
+    esp32Cached: esp32Cache !== null,
+  });
+});
+
 // ─── Page renderers ───────────────────────────────────────────────────────────
 
-/** Shared HTML layout using Tailwind CDN (no build step required). */
+/** Shared HTML layout – uses locally-built Tailwind CSS (public/css/styles.css). */
 function layout(title, bodyContent) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -258,18 +290,7 @@ function layout(title, bodyContent) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${esc(title)}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: { extend: { colors: {
-        hamster: {
-          50:'#fdf8f0', 100:'#fdefd9', 200:'#fad9a8', 300:'#f7be6e',
-          400:'#f3983a', 500:'#ef7c17', 600:'#d9600e', 700:'#b54510',
-          800:'#923717', 900:'#782f16'
-        }
-      }}}
-    }
-  </script>
+  <link rel="stylesheet" href="/css/styles.css">
   <style>
     .gallery-img { transition: transform 0.2s; }
     .gallery-img:hover { transform: scale(1.04); }
@@ -310,10 +331,15 @@ function statCard(icon, label, value, sub) {
 }
 
 function renderIndex({
-  esp32, images,
+  esp32, ltSummary, images,
   todayDistKm, totalDistKm, todayDistMi, totalDistMi,
   lastActiveTime, todayMotion,
 }) {
+  const hasHistory = (ltSummary.totalWheel1 + ltSummary.totalWheel2) > 0;
+  const offlineBadge = esp32.esp32Online === false
+    ? `<span class="inline-block bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded ml-2">ESP32 offline</span>`
+    : '';
+
   const galleryHtml = images.length
     ? `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         ${images.map((img) => `
@@ -333,7 +359,7 @@ function renderIndex({
     : `<p class="text-hamster-400 italic text-sm">No images yet — add entries to <code class="bg-hamster-100 px-1 rounded">images.json</code> to populate the gallery.</p>`;
 
   return layout("Chocolate's Monitor", `
-    <h1 class="text-3xl font-bold text-hamster-800 mb-1">🐹 Chocolate's Live Monitor</h1>
+    <h1 class="text-3xl font-bold text-hamster-800 mb-1">🐹 Chocolate's Live Monitor${offlineBadge}</h1>
     <p class="text-hamster-500 text-sm mb-6">
       Age: <strong>${(esp32.humanYears || 0).toFixed(2)} human years</strong>
       &nbsp;(${(esp32.hamsterYears || 0).toFixed(1)} hamster years)
@@ -342,7 +368,8 @@ function renderIndex({
     <!-- Stat cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       ${statCard('🏃', "Today's Distance", `${todayDistMi} mi`, `${todayDistKm} km`)}
-      ${statCard('🌍', 'All-time Distance', `${totalDistMi} mi`, `${totalDistKm} km`)}
+      ${statCard('🌍', 'All-time Distance', `${totalDistMi} mi`,
+        hasHistory ? `${totalDistKm} km` : `${totalDistKm} km — no historical data yet`)}
       ${statCard('👀', 'Last Seen', lastActiveTime, `on ${esc(esp32.lastLocation || '—')} · ${esp32.lastActiveMinsAgo || '?'} min ago`)}
       ${statCard('⏱️', 'Active Today', `${todayMotion} s`, 'total motion sensor time')}
     </div>
@@ -466,6 +493,31 @@ function renderAnalytics() {
       </div>
     </div>
 
+    <!-- Loading indicator (hidden by default) -->
+    <div id="loadingState" class="hidden text-center py-8 text-hamster-500">
+      <p class="text-sm font-semibold animate-pulse">Loading data…</p>
+    </div>
+
+    <!-- Error state (hidden by default) -->
+    <div id="errorState" class="hidden text-center py-12">
+      <p class="text-5xl mb-4">⚠️</p>
+      <p class="text-lg font-bold text-red-600">Failed to load data</p>
+      <p id="errorMessage" class="text-sm text-red-500 mt-2"></p>
+      <p class="text-xs text-hamster-400 mt-3">Check the server logs and that CSV files exist in CSV_DIR.
+        <a href="/api/status" target="_blank" class="underline hover:text-hamster-600">View /api/status →</a>
+      </p>
+    </div>
+
+    <!-- No-data state (hidden by default) -->
+    <div id="noDataState" class="hidden text-center py-12">
+      <p class="text-5xl mb-4">📊</p>
+      <p class="text-lg font-bold text-hamster-700">No data found for this selection</p>
+      <p class="text-sm text-hamster-400 mt-2">Try a different date range, or check that the data logger is running.</p>
+      <p class="text-xs text-hamster-400 mt-1">
+        <a href="/api/status" target="_blank" class="underline hover:text-hamster-600">View /api/status →</a>
+      </p>
+    </div>
+
     <!-- Summary cards (hidden until data loads) -->
     <div id="summaryCards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 hidden">
       <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
@@ -524,8 +576,8 @@ function renderAnalytics() {
       </div>
     </div>
 
-    <!-- Dependencies -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <!-- Dependencies (locally bundled, no CDN) -->
+    <script src="/js/chart.umd.min.js"></script>
     <script src="/js/analytics.js"></script>
   `);
 }

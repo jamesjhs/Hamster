@@ -26,12 +26,18 @@ sudo mkdir -p /var/node/cert
 sudo cp -r "Node.js App/"* /var/node/cert/
 ```
 
-### 2 – Install dependencies
+### 2 – Install dependencies and build assets
 
 ```bash
 cd /var/node/cert
-npm install --omit=dev
+npm install --omit=dev    # installs Express (runtime dep only)
+npm install               # also installs Tailwind + Chart.js (needed for the build step below)
+npm run build             # builds public/css/styles.css and public/js/chart.umd.min.js
 ```
+
+The built files (`public/css/styles.css` and `public/js/chart.umd.min.js`) are committed to this
+repository, so running `npm run build` is only required after pulling updates that change the CSS
+classes or upgrade Chart.js.
 
 ### 3 – SSL certificates
 
@@ -132,33 +138,31 @@ Edit `/var/node/cert/images.json` to add/remove gallery entries:
 
 ---
 
-## Tailwind CSS – optional build
+## Tailwind CSS – local build
 
-The server uses the **Tailwind CDN** by default (no build step required).  
-For a production build that removes unused utilities and avoids the CDN dependency:
+The server uses a **locally-built** stylesheet (`public/css/styles.css`). No CDN is required.
+The built file is committed to this repository so you only need to rebuild after code changes.
 
 ```bash
 cd /var/node/cert
-npm install                               # includes devDependencies
-npm run build:css                         # writes public/css/styles.css
+npm install                               # includes devDependencies (tailwindcss + chart.js)
+npm run build                             # writes public/css/styles.css and public/js/chart.umd.min.js
 ```
 
-Then replace the CDN `<script>` tag in `server.js` with:
-
-```html
-<link rel="stylesheet" href="/css/styles.css">
-```
+Chart.js is also bundled locally at `public/js/chart.umd.min.js`; the analytics page references
+it directly rather than loading from a CDN.
 
 ---
 
 ## URL map
 
-| URL                         | Description                                      |
-|-----------------------------|--------------------------------------------------|
-| `https://hamster.jahosi.co.uk/`           | Landing page – live stats + gallery |
-| `https://hamster.jahosi.co.uk/analytics`  | Analytics – charts + date-range     |
-| `https://hamster.jahosi.co.uk/kindle`     | Kindle view – plain HTML, no JS     |
-| `https://hamster.jahosi.co.uk/api/live`   | JSON – live ESP32 data              |
-| `https://hamster.jahosi.co.uk/api/csv-files` | JSON – list of CSV files         |
-| `https://hamster.jahosi.co.uk/api/csv-data`  | JSON – CSV rows (+ date filter)  |
-| `https://hamster.jahosi.co.uk/api/images` | JSON – gallery image list           |
+| URL                                            | Description                                     |
+|------------------------------------------------|-------------------------------------------------|
+| `https://hamster.jahosi.co.uk/`                | Landing page – live stats + gallery             |
+| `https://hamster.jahosi.co.uk/analytics`       | Analytics – charts + date-range                 |
+| `https://hamster.jahosi.co.uk/kindle`          | Kindle view – plain HTML, no JS                 |
+| `https://hamster.jahosi.co.uk/api/live`        | JSON – live ESP32 data                          |
+| `https://hamster.jahosi.co.uk/api/csv-files`   | JSON – list of daily CSV files (excl. longterm) |
+| `https://hamster.jahosi.co.uk/api/csv-data`    | JSON – CSV rows (+ date filter)                 |
+| `https://hamster.jahosi.co.uk/api/images`      | JSON – gallery image list                       |
+| `https://hamster.jahosi.co.uk/api/status`      | JSON – system health (CSV path, file counts)    |

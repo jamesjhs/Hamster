@@ -268,13 +268,14 @@ The admin page (`Raspberry Pi Code/index.php`) checks whether `killpid.php` exis
 | `package.json` | NPM metadata, dependency list, build scripts |
 | `package-lock.json` | Exact dependency versions (committed for reproducibility) |
 | `tailwind.config.js` | Tailwind CSS configuration – custom "hamster" colour palette |
-| `src/input.css` | Tailwind source file for optional local build |
+| `src/input.css` | Tailwind source file – run `npm run build` to compile |
 | `images.json` | Gallery descriptor – list of photo objects |
 | `public/js/analytics.js` | Client-side JavaScript for the Analytics page |
+| `public/js/chart.umd.min.js` | Chart.js library – bundled locally (no CDN) |
+| `public/css/styles.css` | Compiled Tailwind CSS – bundled locally (no CDN) |
 | `public/images/` | Folder for full-size gallery photos (served statically) |
 | `public/images/thumbs/` | Folder for thumbnail versions of gallery photos |
-| `public/css/` | Output folder for compiled Tailwind CSS (optional build) |
-| `.gitignore` | Excludes `node_modules/`, built CSS, PM2 logs |
+| `.gitignore` | Excludes `node_modules/` and PM2 logs |
 | `SETUP.md` | Deployment guide for the Raspberry Pi |
 
 ### Deployment Location on the Pi
@@ -290,12 +291,15 @@ The SSL certificates (`cert.pem`, `privkey.pem`) are placed in the same director
 ├── cert.pem           ← SSL certificate (Let's Encrypt)
 ├── privkey.pem        ← SSL private key (Let's Encrypt)
 ├── public/
-│   ├── js/analytics.js
+│   ├── js/
+│   │   ├── analytics.js
+│   │   └── chart.umd.min.js   ← Chart.js (bundled, committed to git)
+│   ├── css/
+│   │   └── styles.css         ← compiled Tailwind CSS (committed to git)
 │   ├── images/
 │   │   ├── *.jpg      ← full-size gallery photos
 │   │   └── thumbs/
 │   │       └── *-thumb.jpg
-│   └── css/           ← (optional) compiled Tailwind CSS
 └── node_modules/      ← installed by npm install (not in git)
 ```
 
@@ -303,6 +307,8 @@ The SSL certificates (`cert.pem`, `privkey.pem`) are placed in the same director
 
 ```bash
 cd /var/node/cert
+npm install               # installs Express (+ devDeps for build step)
+npm run build             # compiles Tailwind CSS and copies Chart.js bundle
 node server.js
 ```
 
@@ -585,13 +591,24 @@ The Analytics page is the most interactive part of the site. All data is fetched
 
 | Control | What it does |
 |---------|-------------|
-| **Data source** dropdown | Choose "Long-term log" (date-range filtering applies) or a specific daily file (date picker is hidden) |
+| **Data source** dropdown | Choose "Long-term log" (date-range filtering applies) or a specific daily file (date picker is hidden). Changing the selection auto-loads data immediately. |
 | **From / To** date pickers | Filter the long-term log to a date range |
-| **Today** button | Sets the range to today only |
-| **Last 7d** button | Sets the range to the last 7 calendar days |
+| **Today** button | Sets the range to today only and auto-loads |
+| **Last 7d** button | Sets the range to the last 7 calendar days and auto-loads |
 | **Last 30d** button | Sets the range to the last 30 calendar days (default on load) |
 | **All time** button | Sets the range to Jan 1 2000 → today (effectively all records) |
-| **Apply ↵** button | Fetches data and refreshes all charts and tables |
+| **Apply ↵** button | Fetches data for the current date-picker values |
+
+**Status states**
+
+The page shows one of the following while interacting with the controls:
+
+| State | Appearance |
+|-------|-----------|
+| **Loading** | "Loading data…" text with a pulsing animation |
+| **No data** | 📊 icon + message explaining no records found; link to `/api/status` for diagnostics |
+| **Error** | ⚠️ icon + error message; link to `/api/status` for diagnostics |
+| **Data loaded** | Summary cards + Chart.js charts + collapsible data table |
 
 **Summary Cards**  
 Once data loads, four summary cards appear showing totals for the selected range:
@@ -601,7 +618,7 @@ Once data loads, four summary cards appear showing totals for the selected range
 - **Total Active Time** (s) – all three motion sensors combined.
 
 **Charts**  
-Two Chart.js line charts update simultaneously:
+Two Chart.js line charts update simultaneously (bundled locally — no CDN required):
 
 | Chart | Y-axis | Datasets |
 |-------|--------|----------|
@@ -636,12 +653,13 @@ The page reloads automatically every **60 seconds** via an HTTP meta-refresh hea
 All APIs return JSON.
 
 #### `GET /api/live`
-Returns the full `getESP32Data()` object. Returns a 503 if the ESP32 is unreachable.
+Returns the full `getESP32Data()` object, including `esp32Online` (boolean). Returns a 503 if the ESP32 is unreachable.
 
 #### `GET /api/csv-files`
-Returns an array of strings: available CSV filenames in the `CSV_DIR`, newest first.
+Returns an array of strings: available **daily** CSV filenames in the `CSV_DIR`, newest first.
+`longtermlog.csv` is intentionally excluded — it is the source for the default "Long-term log" dropdown option.
 ```json
-["longtermlog.csv", "20260301.csv", "20260228.csv"]
+["20260301.csv", "20260228.csv"]
 ```
 
 #### `GET /api/csv-data`
@@ -678,6 +696,21 @@ Returns the parsed `images.json` array.
     "date": "2025-10-12"
   }
 ]
+```
+
+#### `GET /api/status`
+Returns a diagnostic JSON object — useful for debugging when charts are blank or all-time distance looks wrong.
+```json
+{
+  "csvDir": "/var/www/html/hamsterlogger",
+  "longtermlogExists": true,
+  "longtermlogRows": 42,
+  "dailyFileCount": 5,
+  "dailyFiles": ["20260301.csv", "20260228.csv"],
+  "esp32Ip": "192.168.1.98",
+  "cacheAgeMs": 12340,
+  "esp32Cached": true
+}
 ```
 
 ---

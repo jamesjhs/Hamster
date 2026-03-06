@@ -7,31 +7,31 @@ let motionChart = null;
 
 // ─── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  // Default: last 30 days on the long-term log
-  setPreset(30);
-
-  // Populate the file selector with available CSV files
+  // Populate the file selector with available daily CSV files.
+  // longtermlog.csv is already represented by the default option.
   try {
     const files = await fetch('/api/csv-files').then((r) => r.json());
     const sel   = document.getElementById('fileSelect');
     files.forEach((f) => {
+      if (f === 'longtermlog.csv') return; // already covered by default option
       const opt      = document.createElement('option');
       opt.value      = f;
-      opt.textContent = f === 'longtermlog.csv' ? 'Long-term log (all days)' : fmtFilename(f);
+      opt.textContent = fmtFilename(f);
       sel.appendChild(opt);
     });
   } catch (e) {
     console.warn('Could not load CSV file list:', e);
   }
 
-  // When a specific file is chosen, hide the date-range picker (it only applies
-  // to the long-term log).
+  // Auto-load data when a specific file is selected.
   document.getElementById('fileSelect').addEventListener('change', () => {
     const isSpecific = document.getElementById('fileSelect').value !== '';
     document.getElementById('dateRangePicker').style.display = isSpecific ? 'none' : 'flex';
+    loadData();
   });
 
-  loadData();
+  // Default view: last 30 days on the long-term log. setPreset calls loadData().
+  setPreset(30);
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ function fmtFilename(f) {
 }
 
 /**
- * Set the date-range picker to the last `days` days.
+ * Set the date-range picker to the last `days` days and reload data.
  * Pass 0 for "all time" (uses a far-past start date).
  */
 function setPreset(days) {
@@ -60,10 +60,38 @@ function setPreset(days) {
   // Reset file selector to long-term log
   document.getElementById('fileSelect').value = '';
   document.getElementById('dateRangePicker').style.display = 'flex';
+
+  loadData();
 }
 
 // Expose to window so onclick handlers work
 window.setPreset = setPreset;
+
+// ─── UI state helpers ─────────────────────────────────────────────────────────
+function showLoading(visible) {
+  document.getElementById('loadingState').classList.toggle('hidden', !visible);
+}
+
+function showError(message) {
+  document.getElementById('errorMessage').textContent = message;
+  document.getElementById('errorState').classList.remove('hidden');
+}
+
+function showNoData() {
+  document.getElementById('noDataState').classList.remove('hidden');
+}
+
+function clearStates() {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('errorState').classList.add('hidden');
+  document.getElementById('noDataState').classList.add('hidden');
+  document.getElementById('summaryCards').classList.add('hidden');
+  // Clear data table
+  document.getElementById('dataTableBody').innerHTML = '';
+  // Destroy existing charts so canvases are reused cleanly
+  if (wheelChart)  { wheelChart.destroy();  wheelChart  = null; }
+  if (motionChart) { motionChart.destroy(); motionChart = null; }
+}
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
 async function loadData() {
@@ -81,12 +109,34 @@ async function loadData() {
     url += '?' + params.toString();
   }
 
+  clearStates();
+  showLoading(true);
+
   try {
-    const data = await fetch(url).then((r) => r.json());
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      showLoading(false);
+      let msg = `Server error ${response.status}`;
+      try { msg = (await response.json()).error || msg; } catch { /* ignore */ }
+      showError(msg);
+      return;
+    }
+
+    const data = await response.json();
+    showLoading(false);
+
+    if (!data.rows || data.rows.length === 0) {
+      showNoData();
+      return;
+    }
+
     renderCharts(data);
     renderSummary(data);
     renderTable(data);
   } catch (e) {
+    showLoading(false);
+    showError('Network error — could not reach the server.');
     console.error('Failed to load CSV data:', e);
   }
 }
@@ -131,7 +181,6 @@ function renderCharts({ rows, type }) {
   };
 
   // Wheel distance chart
-  if (wheelChart) wheelChart.destroy();
   wheelChart = new Chart(document.getElementById('wheelChart'), {
     type: 'line',
     data: {
@@ -156,7 +205,6 @@ function renderCharts({ rows, type }) {
   });
 
   // Cage motion chart
-  if (motionChart) motionChart.destroy();
   motionChart = new Chart(document.getElementById('motionChart'), {
     type: 'line',
     data: {

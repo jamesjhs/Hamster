@@ -1,1 +1,1 @@
-<?php exec("rm -f 'dieseldata.csv'");?>Deleted dieseldata.csv<p><a href="/diesellogger/">Home</a></p>
+<?php $csvfile = date('Ymd') . '.csv'; exec("rm -f " . escapeshellarg($csvfile));?>Deleted daily log<p><a href="/diesellogger/">Home</a></p>

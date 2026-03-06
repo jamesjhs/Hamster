@@ -1,0 +1,25 @@
+{
+  "name": "hamster-monitor",
+  "version": "1.0.0",
+  "description": "Chocolate the Hamster live monitoring app – Node.js/Express/Tailwind",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build:css": "npx tailwindcss -i ./src/input.css -o ./public/css/styles.css --minify",
+    "watch:css": "npx tailwindcss -i ./src/input.css -o ./public/css/styles.css --watch",
+    "build:chartjs": "cp node_modules/chart.js/dist/chart.umd.min.js public/js/chart.umd.min.js",
+    "build": "npm run build:css && npm run build:chartjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pm2": "^6.0.14"
+  },
+  "devDependencies": {
+    "chart.js": "^4.5.1",
+    "tailwindcss": "^3.4.0"
+  },
+  "license": "MIT"
+}

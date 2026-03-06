@@ -1,0 +1,7 @@
+# Node modules
+node_modules/
+
+# PM2 logs / runtime files
+*.pid
+*.log
+.pm2/

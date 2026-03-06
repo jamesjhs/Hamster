@@ -1,7 +1,7 @@
 import requests
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 processid = str(os.getpid())
 
@@ -71,6 +71,9 @@ def retrieveandsave():
 
     if lasthour > int(datetime.now().strftime("%H")):
         outstring = (str(time.time()) + ","+ distance1 + ","+ distance2 +","+ motion1count+","+ motion2count+","+ motion3count)
+        outfile_daily = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d") + ".csv"
+        with open(outfile_daily, 'a') as f:
+            print(outstring, end="\n", file=f)
         outfile = "longtermlog.csv"
         with open(outfile, 'a') as f:
             print(outstring, end="\n", file=f)

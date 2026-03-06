@@ -1,0 +1,26 @@
+[
+  {
+    "filename": "chocolate-nest.jpg",
+    "thumb": "thumbs/chocolate-nest-thumb.jpg",
+    "description": "Chocolate peeking out of his nest in the top level",
+    "date": "2025-09-07"
+  },
+  {
+    "filename": "chocolate-wheel.jpg",
+    "thumb": "thumbs/chocolate-wheel-thumb.jpg",
+    "description": "Chocolate in full sprint on the bottom wheel at midnight",
+    "date": "2025-10-12"
+  },
+  {
+    "filename": "chocolate-food.jpg",
+    "thumb": "thumbs/chocolate-food-thumb.jpg",
+    "description": "Chocolate stuffing his cheeks with sunflower seeds",
+    "date": "2025-11-03"
+  },
+  {
+    "filename": "chocolate-explore.jpg",
+    "thumb": "thumbs/chocolate-explore-thumb.jpg",
+    "description": "Exploring the ground level with his trademark suspicious look",
+    "date": "2025-12-25"
+  }
+]

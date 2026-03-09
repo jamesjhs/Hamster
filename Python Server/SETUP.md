@@ -42,14 +42,45 @@ the NAS PHP gateway and the Node.js web server, reducing the stack to just
 
 ## Installation
 
+**Linux / macOS**
 ```bash
 cd "Python Server"
 
 # (Recommended) Create a virtual environment
 python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
 # Install dependencies
+pip install -r requirements.txt
+```
+
+**Windows (PowerShell)**
+```powershell
+cd "Python Server"
+
+# (Recommended) Create a virtual environment
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+> **PowerShell execution-policy note:** if you see a script-execution error when
+> running `Activate.ps1`, run this once in an elevated PowerShell window, then
+> try again:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+**Windows (Command Prompt)**
+```cmd
+cd "Python Server"
+
+rem (Recommended) Create a virtual environment
+python -m venv .venv
+.venv\Scripts\activate.bat
+
 pip install -r requirements.txt
 ```
 
@@ -66,26 +97,49 @@ started without modifying source code.
 | `ESP32_IP` | `192.168.1.98` | IP address of the ESP32 on the local network |
 | `CSV_DIR` | `/var/hamsterlogger` | Directory where CSV log files are read and written |
 
-Example:
-
+**Linux / macOS (bash/zsh)**
 ```bash
 export ESP32_IP=192.168.1.98
 export CSV_DIR=/home/pi/hamsterdata
 export PORT=4000
 ```
 
+**Windows (PowerShell)**
+```powershell
+$env:ESP32_IP = "192.168.1.98"
+$env:CSV_DIR  = "C:\hamsterlogger"
+$env:PORT     = "4000"
+```
+
+**Windows (Command Prompt)**
+```cmd
+set ESP32_IP=192.168.1.98
+set CSV_DIR=C:\hamsterlogger
+set PORT=4000
+```
+
+> These variables are set for the **current shell session only**.  Close the
+> window and they are gone.  For a permanent setup use a systemd service (Linux)
+> or a Windows Task Scheduler entry with the variables defined there.
+
 ---
 
 ## Running
 
+**Linux / macOS**
 ```bash
+python3 server.py
+```
+
+**Windows (PowerShell or Command Prompt)**
+```powershell
 python server.py
 ```
 
 The server starts immediately.  The background poller thread fires its first
 poll right away and then every 30 seconds.  Logs are printed to stdout.
 
-### Running as a service (systemd)
+### Running as a service (systemd – Linux)
 
 Create `/etc/systemd/system/hamster.service`:
 
@@ -116,6 +170,34 @@ sudo systemctl enable hamster
 sudo systemctl start hamster
 sudo journalctl -u hamster -f   # follow logs
 ```
+
+### Running on startup (Windows Task Scheduler)
+
+1. Open **Task Scheduler** (search for it in the Start menu).
+2. Click **Create Task…**
+3. **General** tab → give it a name, e.g. `HamsterMonitor`.  Tick
+   *Run whether user is logged on or not* and *Run with highest privileges*.
+4. **Triggers** tab → New → *At startup*.
+5. **Actions** tab → New:
+   - *Action:* Start a program
+   - *Program/script:* `"C:\path\to\Python Server\.venv\Scripts\python.exe"`
+   - *Add arguments:* `server.py`
+   - *Start in:* `"C:\path\to\Python Server"`
+   > Wrap any path that contains spaces in double quotes.
+6. **Environment variables** — add them in the action or via a small
+   wrapper script:
+
+   ```powershell
+   # start_hamster.ps1  (place in the Python Server folder)
+   $env:ESP32_IP = "192.168.1.98"
+   $env:CSV_DIR  = "C:\hamsterlogger"
+   $env:PORT     = "4000"
+   & "$PSScriptRoot\.venv\Scripts\python.exe" "$PSScriptRoot\server.py"
+   ```
+
+   Then point Task Scheduler's *Program/script* at `powershell.exe` with
+   *Arguments* `-File "C:\path\to\Python Server\start_hamster.ps1"`.
+7. Click **OK** and enter your Windows password if prompted.
 
 ---
 

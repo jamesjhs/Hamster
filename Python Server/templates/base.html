@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Chocolate's Monitor{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <style>.gallery-img{transition:transform .2s}.gallery-img:hover{transform:scale(1.04)}</style>
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-hamster-50 text-hamster-900 min-h-screen flex flex-col">
+  <nav class="bg-hamster-800 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 text-xl font-bold hover:text-hamster-200 transition-colors">
+        <span>🐹</span><span>Chocolate's Monitor</span>
+      </a>
+      <div class="flex gap-6 text-sm font-medium">
+        <a href="/"          class="hover:text-hamster-200 transition-colors">Home</a>
+        <a href="/analytics" class="hover:text-hamster-200 transition-colors">Analytics</a>
+        <a href="/kindle"    class="hover:text-hamster-200 transition-colors">Kindle</a>
+      </div>
+    </div>
+  </nav>
+  <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="bg-hamster-800 text-hamster-200 text-center text-xs py-3 mt-auto">
+    Chocolate &bull; Russian Dwarf Hamster &bull; hamster.jahosi.co.uk
+  </footer>
+</body>
+</html>

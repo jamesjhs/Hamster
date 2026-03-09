@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Chocolate's Monitor – Analytics{% endblock %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold text-hamster-800 mb-6">📊 Analytics</h1>
+
+  <!-- Controls panel -->
+  <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-6">
+    <div class="flex flex-wrap gap-4 items-end">
+
+      <div>
+        <label class="text-xs text-hamster-500 font-semibold block mb-1">Data source</label>
+        <select id="fileSelect"
+                class="border border-hamster-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hamster-400 bg-white">
+          <option value="">Long-term log (use date range below)</option>
+        </select>
+      </div>
+
+      <div id="dateRangePicker" class="flex flex-wrap gap-3 items-end">
+        <div>
+          <label class="text-xs text-hamster-500 font-semibold block mb-1">From</label>
+          <input type="date" id="fromDate"
+                 class="border border-hamster-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hamster-400">
+        </div>
+        <div>
+          <label class="text-xs text-hamster-500 font-semibold block mb-1">To</label>
+          <input type="date" id="toDate"
+                 class="border border-hamster-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hamster-400">
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button onclick="setPreset(1)"
+                class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Today</button>
+        <button onclick="setPreset(7)"
+                class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Last 7d</button>
+        <button onclick="setPreset(30)"
+                class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Last 30d</button>
+        <button onclick="setPreset(0)"
+                class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">All time</button>
+        <button onclick="loadData()"
+                class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-4 py-2 rounded-lg font-semibold transition-colors">Apply ↵</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading indicator -->
+  <div id="loadingState" class="hidden text-center py-8 text-hamster-500">
+    <p class="text-sm font-semibold animate-pulse">Loading data…</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="errorState" class="hidden text-center py-12">
+    <p class="text-5xl mb-4">⚠️</p>
+    <p class="text-lg font-bold text-red-600">Failed to load data</p>
+    <p id="errorMessage" class="text-sm text-red-500 mt-2"></p>
+    <p class="text-xs text-hamster-400 mt-3">Check the server logs and that CSV files exist in CSV_DIR.
+      <a href="/api/status" target="_blank" class="underline hover:text-hamster-600">View /api/status →</a>
+    </p>
+  </div>
+
+  <!-- No-data state -->
+  <div id="noDataState" class="hidden text-center py-12">
+    <p class="text-5xl mb-4">📊</p>
+    <p class="text-lg font-bold text-hamster-700">No data found for this selection</p>
+    <p class="text-sm text-hamster-400 mt-2">Try a different date range, or check that the data logger is running.</p>
+    <p class="text-xs text-hamster-400 mt-1">
+      <a href="/api/status" target="_blank" class="underline hover:text-hamster-600">View /api/status →</a>
+    </p>
+  </div>
+
+  <!-- Summary cards -->
+  <div id="summaryCards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 hidden">
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+      <p class="text-xs text-hamster-500 uppercase font-semibold">Total Distance</p>
+      <p class="text-2xl font-bold text-hamster-800" id="sumTotalDist">—</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+      <p class="text-xs text-hamster-500 uppercase font-semibold">Wheel 1 (bottom)</p>
+      <p class="text-2xl font-bold text-hamster-800" id="sumWheel1">—</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+      <p class="text-xs text-hamster-500 uppercase font-semibold">Wheel 2 (top)</p>
+      <p class="text-2xl font-bold text-hamster-800" id="sumWheel2">—</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+      <p class="text-xs text-hamster-500 uppercase font-semibold">Total Active Time</p>
+      <p class="text-2xl font-bold text-hamster-800" id="sumTotalMotion">—</p>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Wheel Distance (m)</h3>
+      <canvas id="wheelChart"></canvas>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Cage Activity by Level (s)</h3>
+      <canvas id="motionChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Collapsible data table -->
+  <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+    <button onclick="toggleTable()"
+            class="flex items-center gap-2 font-bold text-hamster-700 hover:text-hamster-900 transition-colors w-full text-left">
+      <span id="tableToggleIcon" class="w-4 inline-block">▶</span>
+      <span>Data Table</span>
+    </button>
+    <div id="tableContainer" class="hidden mt-4 overflow-x-auto">
+      <table class="w-full text-xs border-collapse">
+        <thead>
+          <tr class="bg-hamster-100 text-hamster-700 text-left">
+            <th class="px-2 py-1.5">Date / Time</th>
+            <th class="px-2 py-1.5 text-right">Wheel 1 (m)</th>
+            <th class="px-2 py-1.5 text-right">Wheel 2 (m)</th>
+            <th class="px-2 py-1.5 text-right">Total Dist (m)</th>
+            <th class="px-2 py-1.5 text-right">Ground (s)</th>
+            <th class="px-2 py-1.5 text-right">Middle (s)</th>
+            <th class="px-2 py-1.5 text-right">Top (s)</th>
+            <th class="px-2 py-1.5 text-right">Total Active (s)</th>
+          </tr>
+        </thead>
+        <tbody id="dataTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/static/js/chart.umd.min.js"></script>
+  <script src="/static/js/analytics.js"></script>
+{% endblock %}

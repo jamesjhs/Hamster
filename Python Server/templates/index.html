@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Chocolate's Monitor{% endblock %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold text-hamster-800 mb-1">
+    🐹 Chocolate's Live Monitor
+    {% if not esp32.esp32Online %}
+      <span class="inline-block bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded ml-2">ESP32 offline</span>
+    {% endif %}
+  </h1>
+  <p class="text-hamster-500 text-sm mb-6">
+    Age: <strong>{{ "%.2f"|format(esp32.humanYears or 0) }} human years</strong>
+    &nbsp;({{ "%.1f"|format(esp32.hamsterYears or 0) }} hamster years)
+  </p>
+
+  <!-- Stat cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 flex items-start gap-4">
+      <div class="text-4xl leading-none">🏃</div>
+      <div>
+        <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Today's Distance</p>
+        <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ today_dist_mi }} mi</p>
+        <p class="text-xs text-hamster-400 mt-0.5">{{ today_dist_km }} km</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 flex items-start gap-4">
+      <div class="text-4xl leading-none">🌍</div>
+      <div>
+        <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">All-time Distance</p>
+        <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ total_dist_mi }} mi</p>
+        <p class="text-xs text-hamster-400 mt-0.5">
+          {{ total_dist_km }} km
+          {% if not has_history %} — no historical data yet{% endif %}
+        </p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 flex items-start gap-4">
+      <div class="text-4xl leading-none">👀</div>
+      <div>
+        <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Last Seen</p>
+        <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ last_active_time }}</p>
+        <p class="text-xs text-hamster-400 mt-0.5">
+          on {{ esp32.lastLocation or '—' }} &middot; {{ esp32.lastActiveMinsAgo or '?' }} min ago
+        </p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 flex items-start gap-4">
+      <div class="text-4xl leading-none">⏱️</div>
+      <div>
+        <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Active Today</p>
+        <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ today_motion }} s</p>
+        <p class="text-xs text-hamster-400 mt-0.5">total motion sensor time</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Today's breakdown -->
+  <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-8">
+    <h2 class="text-lg font-bold text-hamster-800 mb-4">Today's Activity</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+      <div>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Wheel 1 (bottom)</p>
+        <p class="text-xl font-bold">{{ "%.2f"|format(esp32.distance1 or 0) }} m</p>
+      </div>
+      <div>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Wheel 2 (top)</p>
+        <p class="text-xl font-bold">{{ "%.2f"|format(esp32.distance2 or 0) }} m</p>
+      </div>
+      <div>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Max Speed</p>
+        <p class="text-xl font-bold">{{ "%.2f"|format(esp32.maxspeed or 0) }} m/s</p>
+      </div>
+      <div>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Ground Floor</p>
+        <p class="text-xl font-bold">{{ "%.1f"|format(esp32.motion1count or 0) }} s</p>
+      </div>
+      <div>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Middle Floor</p>
+        <p class="text-xl font-bold">{{ "%.1f"|format(esp32.motion2count or 0) }} s</p>
+      </div>
+      <div>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Top Floor</p>
+        <p class="text-xl font-bold">{{ "%.1f"|format(esp32.motion3count or 0) }} s</p>
+      </div>
+    </div>
+    <p class="text-xs text-hamster-400 mt-5">
+      Data cached for 30 s. &nbsp;
+      <a href="javascript:location.reload()" class="underline hover:text-hamster-600">Refresh now</a>
+      &nbsp;·&nbsp;
+      <a href="/analytics" class="underline hover:text-hamster-600">View full analytics →</a>
+    </p>
+  </div>
+
+  <!-- Photo Gallery -->
+  <div class="mb-6">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-bold text-hamster-800">📸 Photo Gallery</h2>
+      <span class="text-xs text-hamster-400">
+        {{ images|length }} photo{{ '' if images|length == 1 else 's' }}
+      </span>
+    </div>
+
+    {% if images %}
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        {% for img in images %}
+          <div class="bg-white rounded-xl overflow-hidden shadow-sm border border-hamster-100 cursor-pointer"
+               onclick="openLightbox('{{ img.filename|e }}','{{ (img.description or '')|e }}')">
+            <div class="aspect-square overflow-hidden bg-hamster-100">
+              <img src="/static/images/{{ (img.thumb or img.filename)|e }}"
+                   alt="{{ (img.description or 'Chocolate')|e }}"
+                   class="gallery-img w-full h-full object-cover" loading="lazy">
+            </div>
+            <div class="p-2">
+              <p class="text-xs text-hamster-700 leading-snug line-clamp-2">{{ (img.description or '')|e }}</p>
+              {% if img.date %}
+                <p class="text-xs text-hamster-400 mt-0.5">{{ img.date|e }}</p>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-hamster-400 italic text-sm">
+        No images yet — add entries to <code class="bg-hamster-100 px-1 rounded">images.json</code>
+        and place photos in <code class="bg-hamster-100 px-1 rounded">static/images/</code>.
+      </p>
+    {% endif %}
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox"
+       class="fixed inset-0 bg-black/80 z-50 items-center justify-center"
+       style="display:none" onclick="closeLightbox()">
+    <div class="max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
+      <div class="bg-white rounded-xl overflow-hidden shadow-2xl">
+        <img id="lbImg" src="" alt="" class="w-full object-contain max-h-[70vh]">
+        <div class="p-4 flex items-start justify-between gap-4">
+          <p id="lbCaption" class="text-hamster-700 text-sm flex-1"></p>
+          <button onclick="closeLightbox()"
+                  class="text-xs text-hamster-400 underline hover:text-hamster-700 shrink-0">Close ✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function openLightbox(filename, desc) {
+      document.getElementById('lbImg').src = '/static/images/' + filename;
+      document.getElementById('lbCaption').textContent = desc;
+      document.getElementById('lightbox').style.display = 'flex';
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').style.display = 'none';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+  </script>
+{% endblock %}

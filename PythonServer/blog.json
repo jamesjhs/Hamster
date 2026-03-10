@@ -105,7 +105,7 @@
     "title": "Using python as the main data parser AND the webserver",
     "slug": "python-data-parser-and-webserver",
     "date":  "2026-03-10",
-    "content": "The project had been using FOUR different pieces of hardware to do the job of collecting data (ESP32), parsing data (Raspberry Pi), serving a website (Network-attached storage), and hosting the content (a paid webserver) - which seems a little superfluous. Instead, using Python to run the back-end webserver AND retrieve the data from the ESP32 makes a lo more sense, so welcome to the Python webserver!"
+    "content": "The project had been using FOUR (!) different pieces of hardware to do the job of collecting data (ESP32), parsing data (Raspberry Pi), serving a website (Network-attached storage), and hosting the content (a paid webserver) - which seems a little superfluous. Instead, using Python to run the back-end webserver AND retrieve the data from the ESP32 makes a lo more sense, so welcome to the Python webserver!"
   },
   {
     "slug": "plans-for-the-future",

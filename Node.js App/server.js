@@ -262,6 +262,93 @@ app.get('/api/images', (_req, res) => {
   res.json(loadImages());
 });
 
+// API – heatmap data (activity or distance per 30-minute slot per day)
+app.get('/api/heatmap', (req, res) => {
+  const { from, to, metric = 'distance' } = req.query;
+
+  if (metric !== 'distance' && metric !== 'activity') {
+    return res.status(400).json({ error: 'metric must be "distance" or "activity"' });
+  }
+
+  const today     = new Date();
+  today.setHours(0, 0, 0, 0);
+  const fromDate  = from ? new Date(from) : (() => { const d = new Date(today); d.setDate(d.getDate() - 29); return d; })();
+  const toDate    = to   ? new Date(to)   : new Date(today);
+  fromDate.setHours(0, 0, 0, 0);
+  toDate.setHours(0, 0, 0, 0);
+
+  if (isNaN(fromDate) || isNaN(toDate)) {
+    return res.status(400).json({ error: 'Invalid date format – use YYYY-MM-DD' });
+  }
+  if (fromDate > toDate) {
+    return res.status(400).json({ error: 'from date must be ≤ to date' });
+  }
+
+  // Build list of all dates in range
+  const dates = [];
+  const d = new Date(fromDate);
+  while (d <= toDate) {
+    dates.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+
+  // 48 half-hour slots centred around midnight:
+  //   slot 0  = 12:00  slot 23 = 23:30
+  //   slot 24 = 00:00  slot 47 = 11:30
+  const NUM_SLOTS = 48;
+  const matrix = Array.from({ length: NUM_SLOTS }, () => new Array(dates.length).fill(0));
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  for (let dateIdx = 0; dateIdx < dates.length; dateIdx++) {
+    const dt    = dates[dateIdx];
+    const fname = `${dt.getFullYear()}${pad(dt.getMonth() + 1)}${pad(dt.getDate())}.csv`;
+    const rows  = readCSV(path.join(CSV_DIR, fname));
+
+    for (let i = 1; i < rows.length; i++) {
+      const prev = rows[i - 1];
+      const curr = rows[i];
+      const ts   = curr[0];
+      const t    = new Date(ts * 1000);
+      const minsFromMidnight = t.getHours() * 60 + t.getMinutes();
+      // Rotate so noon (720 min from midnight) maps to slot 0
+      const minsFromNoon = ((minsFromMidnight - 720) + 1440) % 1440;
+      const slot = Math.floor(minsFromNoon / 30);
+
+      let val;
+      if (metric === 'distance') {
+        val = Math.max(0, (curr[1] || 0) - (prev[1] || 0))
+            + Math.max(0, (curr[2] || 0) - (prev[2] || 0));
+      } else {
+        val = Math.max(0, (curr[3] || 0) - (prev[3] || 0))
+            + Math.max(0, (curr[4] || 0) - (prev[4] || 0))
+            + Math.max(0, (curr[5] || 0) - (prev[5] || 0));
+      }
+      matrix[slot][dateIdx] += val;
+    }
+  }
+
+  // Slot labels: derive clock time for each slot
+  const slots = Array.from({ length: NUM_SLOTS }, (_, i) => {
+    const minsFromMidnight = (i * 30 + 720) % 1440;
+    const h = Math.floor(minsFromMidnight / 60);
+    const m = minsFromMidnight % 60;
+    return `${pad(h)}:${pad(m)}`;
+  });
+
+  const maxVal = Math.max(0, ...matrix.flat());
+
+  return res.json({
+    dates:  dates.map((dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`),
+    slots,
+    matrix,
+    maxVal,
+    metric,
+  });
+});
+
+
+
 // API – system status (useful for debugging CSV path issues)
 app.get('/api/status', (_req, res) => {
   const longtermPath = path.join(CSV_DIR, 'longtermlog.csv');
@@ -297,18 +384,74 @@ function layout(title, bodyContent) {
   </style>
 </head>
 <body class="bg-hamster-50 text-hamster-900 min-h-screen flex flex-col">
-  <nav class="bg-hamster-800 text-white shadow-lg">
+  <nav class="bg-hamster-800 text-white shadow-lg" style="position:relative">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
       <a href="/" class="flex items-center gap-2 text-xl font-bold hover:text-hamster-200 transition-colors">
         <span>🐹</span><span>Chocolate's Monitor</span>
       </a>
-      <div class="flex gap-6 text-sm font-medium">
+      <!-- Desktop navigation links (hidden on small screens) -->
+      <div id="navLinks" class="flex gap-6 text-sm font-medium" style="display:none">
         <a href="/"          class="hover:text-hamster-200 transition-colors">Home</a>
         <a href="/analytics" class="hover:text-hamster-200 transition-colors">Analytics</a>
         <a href="/kindle"    class="hover:text-hamster-200 transition-colors">Kindle</a>
       </div>
+      <!-- Hamburger button (hidden on large screens) -->
+      <button id="navToggle" aria-label="Toggle menu"
+              style="background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:inherit"
+              onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'"
+              onmouseleave="this.style.backgroundColor='transparent'">
+        <svg id="navIconHam" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+        <svg id="navIconX" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="display:none">
+          <line x1="18" y1="6"  x2="6"  y2="18"/>
+          <line x1="6"  y1="6"  x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Mobile dropdown menu -->
+    <div id="mobileMenu" style="display:none;background:#782f16;border-top:1px solid rgba(255,255,255,0.15)">
+      <div class="max-w-6xl mx-auto px-4 py-2" style="display:flex;flex-direction:column;gap:2px">
+        <a href="/"          style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Home</a>
+        <a href="/analytics" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Analytics</a>
+        <a href="/kindle"    style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Kindle</a>
+      </div>
     </div>
   </nav>
+  <script>
+    (function () {
+      var toggle   = document.getElementById('navToggle');
+      var menu     = document.getElementById('mobileMenu');
+      var navLinks = document.getElementById('navLinks');
+      var iconHam  = document.getElementById('navIconHam');
+      var iconX    = document.getElementById('navIconX');
+
+      function applyLayout() {
+        if (window.innerWidth >= 768) {
+          navLinks.style.display = 'flex';
+          toggle.style.display   = 'none';
+          menu.style.display     = 'none';
+        } else {
+          navLinks.style.display = 'none';
+          toggle.style.display   = 'block';
+        }
+      }
+
+      toggle.addEventListener('click', function () {
+        var open = menu.style.display === 'none' || menu.style.display === '';
+        menu.style.display    = open ? 'block' : 'none';
+        iconHam.style.display = open ? 'none'  : 'block';
+        iconX.style.display   = open ? 'block' : 'none';
+      });
+
+      applyLayout();
+      window.addEventListener('resize', applyLayout);
+    })();
+  </script>
   <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
     ${bodyContent}
   </main>
@@ -547,6 +690,35 @@ function renderAnalytics() {
       <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
         <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Cage Activity by Level (s)</h3>
         <canvas id="motionChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Activity Heatmap -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-6">
+      <div class="flex flex-wrap items-center gap-4 mb-3">
+        <h3 class="font-bold text-hamster-700 text-sm uppercase tracking-wide flex-1">Activity Heatmap</h3>
+        <div class="flex gap-2">
+          <button id="heatmapBtnDistance" onclick="setHeatmapMetric('distance')"
+                  class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">Distance (m)</button>
+          <button id="heatmapBtnActivity" onclick="setHeatmapMetric('activity')"
+                  class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">Activity (s)</button>
+        </div>
+      </div>
+      <p class="text-xs text-hamster-400 mb-3">
+        Horizontal axis: date &nbsp;·&nbsp; Vertical axis: time of day (centred around midnight)
+        &nbsp;·&nbsp; Brighter cell = more active
+      </p>
+      <div id="heatmapContainer" class="overflow-x-auto">
+        <canvas id="heatmapCanvas" style="display:block;max-width:100%"></canvas>
+      </div>
+      <div id="heatmapNoData" class="hidden text-center py-6 text-hamster-400 text-sm italic">
+        No heatmap data available for the current date range.
+      </div>
+      <!-- Colour legend -->
+      <div class="flex items-center gap-2 mt-3">
+        <span class="text-xs text-hamster-500">Less</span>
+        <canvas id="heatmapLegend" width="120" height="12" style="border-radius:3px"></canvas>
+        <span class="text-xs text-hamster-500">More</span>
       </div>
     </div>
 

@@ -4,6 +4,7 @@
 // ─── State ────────────────────────────────────────────────────────────────────
 let wheelChart  = null;
 let motionChart = null;
+let _heatmapMetric = 'distance';
 
 // ─── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -153,6 +154,7 @@ async function loadData() {
     renderCharts(data);
     renderSummary(data);
     renderTable(data);
+    loadHeatmap();
   } catch (e) {
     showLoading(false);
     showError('Network error — could not reach the server.');
@@ -330,3 +332,175 @@ function toggleTable() {
 }
 
 window.toggleTable = toggleTable;
+
+// ─── Heatmap ──────────────────────────────────────────────────────────────────
+
+/**
+ * Map a normalised value [0..1] to a warm colour:
+ *   0 → near-black (#120500)  →  1 → bright orange (#ef7c17)
+ * A gamma curve (0.5) lifts low values so even sparse activity is visible.
+ */
+function _heatColor(val, maxVal) {
+  if (maxVal === 0) return '#120500';
+  const t = Math.pow(Math.min(val / maxVal, 1), 0.5);
+  const r = Math.round(18  + t * (239 - 18));
+  const g = Math.round(5   + t * (124 - 5));
+  const b = Math.round(0   + t * (23  - 0));
+  return `rgb(${r},${g},${b})`;
+}
+
+/** Render the colour-scale legend bar. */
+function _drawLegend(maxVal) {
+  const canvas = document.getElementById('heatmapLegend');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w   = canvas.width;
+  const h   = canvas.height;
+  for (let x = 0; x < w; x++) {
+    ctx.fillStyle = _heatColor(x, w - 1);
+    ctx.fillRect(x, 0, 1, h);
+  }
+}
+
+/**
+ * Draw the heatmap on #heatmapCanvas.
+ * Layout: X-axis = dates, Y-axis = 30-min time slots (noon → midnight → noon).
+ */
+function renderHeatmap({ dates, slots, matrix, maxVal }) {
+  const canvas   = document.getElementById('heatmapCanvas');
+  const noDataEl = document.getElementById('heatmapNoData');
+  if (!canvas) return;
+
+  if (!dates || dates.length === 0) {
+    canvas.style.display = 'none';
+    noDataEl.classList.remove('hidden');
+    return;
+  }
+  noDataEl.classList.add('hidden');
+  canvas.style.display = 'block';
+
+  // Cell dimensions: auto-fit width; fixed height per slot
+  const containerW = canvas.parentElement.clientWidth || 600;
+  const MARGIN_L   = 42;   // space for time labels on left
+  const MARGIN_T   = 34;   // space for date labels on top
+  const MARGIN_B   = 4;
+  const NUM_SLOTS  = slots.length;
+
+  const CELL_W = Math.max(4, Math.floor((containerW - MARGIN_L) / dates.length));
+  const CELL_H = 10;
+
+  canvas.width  = MARGIN_L + dates.length * CELL_W;
+  canvas.height = MARGIN_T + NUM_SLOTS * CELL_H + MARGIN_B;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // ── Draw cells ──────────────────────────────────────────────────────────────
+  for (let s = 0; s < NUM_SLOTS; s++) {
+    for (let d = 0; d < dates.length; d++) {
+      ctx.fillStyle = _heatColor(matrix[s][d], maxVal);
+      ctx.fillRect(
+        MARGIN_L + d * CELL_W,
+        MARGIN_T + s * CELL_H,
+        Math.max(1, CELL_W - 1),
+        CELL_H - 1,
+      );
+    }
+  }
+
+  // ── Time labels (Y-axis, every 2 hours = 4 slots) ───────────────────────────
+  ctx.fillStyle    = '#923717';
+  ctx.font         = '9px sans-serif';
+  ctx.textAlign    = 'right';
+  ctx.textBaseline = 'middle';
+  for (let s = 0; s < NUM_SLOTS; s += 4) {   // every 2 hours
+    const label = slots[s];
+    const y     = MARGIN_T + s * CELL_H + CELL_H / 2;
+    ctx.fillText(label, MARGIN_L - 3, y);
+  }
+
+  // ── Midnight marker line ─────────────────────────────────────────────────────
+  const midnightSlot = 24;   // slot 24 = 00:00
+  const midY = MARGIN_T + midnightSlot * CELL_H;
+  ctx.strokeStyle = 'rgba(239,124,23,0.6)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(MARGIN_L, midY);
+  ctx.lineTo(canvas.width, midY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── Date labels (X-axis) ─────────────────────────────────────────────────────
+  const step = Math.max(1, Math.ceil(dates.length / Math.floor((canvas.width - MARGIN_L) / 30)));
+  ctx.fillStyle    = '#923717';
+  ctx.font         = '9px sans-serif';
+  ctx.textAlign    = 'right';
+  ctx.textBaseline = 'alphabetic';
+  for (let d = 0; d < dates.length; d += step) {
+    const x     = MARGIN_L + d * CELL_W + CELL_W / 2;
+    const label = dates[d].slice(5);   // MM-DD
+    ctx.save();
+    ctx.translate(x, MARGIN_T - 4);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  _drawLegend(maxVal);
+}
+
+/** Fetch heatmap data from the API using the current date range. */
+async function loadHeatmap() {
+  const file     = document.getElementById('fileSelect').value;
+  const fromDate = document.getElementById('fromDate').value;
+  const toDate   = document.getElementById('toDate').value;
+
+  const params = new URLSearchParams({ metric: _heatmapMetric });
+
+  if (file && file !== '') {
+    // For an intraday file, derive the date from the filename (YYYYMMDD.csv)
+    const m = file.match(/^(\d{4})(\d{2})(\d{2})\.csv$/);
+    if (m) {
+      const dateStr = `${m[1]}-${m[2]}-${m[3]}`;
+      params.set('from', dateStr);
+      params.set('to',   dateStr);
+    }
+  } else {
+    if (fromDate) params.set('from', fromDate);
+    if (toDate)   params.set('to',   toDate);
+  }
+
+  try {
+    const data = await fetch(`/api/heatmap?${params}`).then((r) => r.json());
+    renderHeatmap(data);
+  } catch (e) {
+    console.warn('Heatmap load failed:', e);
+  }
+}
+
+/** Switch the heatmap metric and reload. */
+function setHeatmapMetric(metric) {
+  _heatmapMetric = metric;
+  // Update button styles
+  const btnDist = document.getElementById('heatmapBtnDistance');
+  const btnAct  = document.getElementById('heatmapBtnActivity');
+  if (btnDist && btnAct) {
+    const activeClass   = ['bg-hamster-700', 'hover:bg-hamster-800', 'text-white'];
+    const inactiveClass = ['bg-hamster-100', 'hover:bg-hamster-200', 'text-hamster-700'];
+    if (metric === 'distance') {
+      activeClass.forEach((c) => btnDist.classList.add(c));
+      inactiveClass.forEach((c) => btnDist.classList.remove(c));
+      inactiveClass.forEach((c) => btnAct.classList.add(c));
+      activeClass.forEach((c) => btnAct.classList.remove(c));
+    } else {
+      activeClass.forEach((c) => btnAct.classList.add(c));
+      inactiveClass.forEach((c) => btnAct.classList.remove(c));
+      inactiveClass.forEach((c) => btnDist.classList.add(c));
+      activeClass.forEach((c) => btnDist.classList.remove(c));
+    }
+  }
+  loadHeatmap();
+}
+
+window.setHeatmapMetric = setHeatmapMetric;

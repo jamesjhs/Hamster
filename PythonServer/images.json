@@ -57,7 +57,7 @@
   },  {
     "filename": "9.jpg",
     "thumb": "thumbs/9.jpg",
-    "description": "Breadboard and power supply (via LM317's)",
+    "description": "Breadboard and power supply (via LM317\'s)",
     "date": "2025-09-07"
   },  {
     "filename": "10.jpg",
@@ -92,12 +92,12 @@
   },  {
     "filename": "ActivityHeatmap.jpg",
     "thumb": "thumbs/ActivityHeatmap.jpg",
-    "description": "Heatmap of Chocolate's running throughout the day",
+    "description": "Heatmap of Chocolate\'s running throughout the day",
     "date": "2025-09-07"
   },  {
     "filename": "DistanceHeatmap.jpg",
     "thumb": "thumbs/DistanceHeatmap.jpg",
-    "description": "Heatmap of Chocolate's activity throughout the day",
+    "description": "Heatmap of Chocolate\'s activity throughout the day",
     "date": "2025-09-07"
   }
 

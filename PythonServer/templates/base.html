@@ -9,19 +9,77 @@
   {% block head %}{% endblock %}
 </head>
 <body class="bg-hamster-50 text-hamster-900 min-h-screen flex flex-col">
-  <nav class="bg-hamster-800 text-white shadow-lg">
+  <nav class="bg-hamster-800 text-white shadow-lg" style="position:relative">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
       <a href="/" class="flex items-center gap-2 text-xl font-bold hover:text-hamster-200 transition-colors">
         <span>🐹</span><span>Chocolate's Monitor</span>
       </a>
-      <div class="flex gap-6 text-sm font-medium">
+      <!-- Desktop navigation links (hidden on small screens) -->
+      <div id="navLinks" class="flex gap-6 text-sm font-medium" style="display:none">
         <a href="/"          class="hover:text-hamster-200 transition-colors">Home</a>
         <a href="/analytics" class="hover:text-hamster-200 transition-colors">Analytics</a>
         <a href="/blog"      class="hover:text-hamster-200 transition-colors">Blog</a>
         <a href="/kindle"    class="hover:text-hamster-200 transition-colors">Kindle</a>
       </div>
+      <!-- Hamburger button (hidden on large screens) -->
+      <button id="navToggle" aria-label="Toggle menu"
+              style="background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:inherit"
+              onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'"
+              onmouseleave="this.style.backgroundColor='transparent'">
+        <svg id="navIconHam" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+        <svg id="navIconX" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="display:none">
+          <line x1="18" y1="6"  x2="6"  y2="18"/>
+          <line x1="6"  y1="6"  x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Mobile dropdown menu -->
+    <div id="mobileMenu" style="display:none;background:#782f16;border-top:1px solid rgba(255,255,255,0.15)">
+      <div class="max-w-6xl mx-auto px-4 py-2" style="display:flex;flex-direction:column;gap:2px">
+        <a href="/"          style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Home</a>
+        <a href="/analytics" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Analytics</a>
+        <a href="/blog"      style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Blog</a>
+        <a href="/kindle"    style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Kindle</a>
+      </div>
     </div>
   </nav>
+  <script>
+    (function () {
+      var toggle   = document.getElementById('navToggle');
+      var menu     = document.getElementById('mobileMenu');
+      var navLinks = document.getElementById('navLinks');
+      var iconHam  = document.getElementById('navIconHam');
+      var iconX    = document.getElementById('navIconX');
+
+      // Show desktop links or hamburger based on viewport width
+      function applyLayout() {
+        if (window.innerWidth >= 768) {
+          navLinks.style.display = 'flex';
+          toggle.style.display   = 'none';
+          menu.style.display     = 'none';
+        } else {
+          navLinks.style.display = 'none';
+          toggle.style.display   = 'block';
+        }
+      }
+
+      toggle.addEventListener('click', function () {
+        var open = menu.style.display === 'none' || menu.style.display === '';
+        menu.style.display   = open ? 'block' : 'none';
+        iconHam.style.display = open ? 'none'  : 'block';
+        iconX.style.display   = open ? 'block' : 'none';
+      });
+
+      applyLayout();
+      window.addEventListener('resize', applyLayout);
+    })();
+  </script>
   <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
     {% block content %}{% endblock %}
   </main>

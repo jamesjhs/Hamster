@@ -414,8 +414,103 @@ def api_csv_data():
     return jsonify({'type': 'longterm', 'rows': rows})
 
 
-@app.route('/api/images')
-def api_images():
+@app.route('/api/heatmap')
+def api_heatmap():
+    """Return heatmap data: activity/distance per 30-minute slot per day.
+
+    Query parameters:
+      from   – start date YYYY-MM-DD (default: 30 days ago)
+      to     – end   date YYYY-MM-DD (default: today)
+      metric – 'distance' or 'activity' (default: 'distance')
+
+    Response JSON:
+      dates  – list of date strings (X-axis, one per column)
+      slots  – list of 48 time-of-day labels centred around midnight (Y-axis)
+      matrix – 2-D list [slot_index][date_index] with aggregated values
+      maxVal – maximum cell value (for client-side colour scaling)
+      metric – the requested metric
+    """
+    from_date_str = request.args.get('from')
+    to_date_str   = request.args.get('to')
+    metric        = request.args.get('metric', 'distance')
+
+    if metric not in ('distance', 'activity'):
+        return jsonify({'error': 'metric must be "distance" or "activity"'}), 400
+
+    try:
+        today = datetime.now().date()
+        from_date = (
+            datetime.strptime(from_date_str, '%Y-%m-%d').date()
+            if from_date_str else today - timedelta(days=29)
+        )
+        to_date = (
+            datetime.strptime(to_date_str, '%Y-%m-%d').date()
+            if to_date_str else today
+        )
+    except ValueError:
+        return jsonify({'error': 'Invalid date format – use YYYY-MM-DD'}), 400
+
+    if from_date > to_date:
+        return jsonify({'error': 'from date must be ≤ to date'}), 400
+
+    # Build list of all dates in range
+    dates = []
+    d = from_date
+    while d <= to_date:
+        dates.append(d)
+        d += timedelta(days=1)
+
+    # 48 half-hour slots centred around midnight:
+    #   slot 0  = 12:00  slot 23 = 23:30
+    #   slot 24 = 00:00  slot 47 = 11:30
+    NUM_SLOTS = 48
+    matrix = [[0.0] * len(dates) for _ in range(NUM_SLOTS)]
+
+    for date_idx, date in enumerate(dates):
+        fname = date.strftime('%Y%m%d.csv')
+        rows  = read_csv(CSV_DIR / fname)
+        for i in range(1, len(rows)):
+            prev = rows[i - 1]
+            curr = rows[i]
+            ts   = curr[0]
+            dt   = datetime.fromtimestamp(ts)
+            mins_from_midnight = dt.hour * 60 + dt.minute
+            # Rotate so that noon (720 min) maps to slot 0
+            mins_from_noon = (mins_from_midnight - 720 + 1440) % 1440
+            slot = int(mins_from_noon // 30)
+            if metric == 'distance':
+                val = (
+                    max(0.0, (curr[1] or 0) - (prev[1] or 0))
+                    + max(0.0, (curr[2] or 0) - (prev[2] or 0))
+                )
+            else:  # activity
+                val = (
+                    max(0.0, (curr[3] or 0) - (prev[3] or 0))
+                    + max(0.0, (curr[4] or 0) - (prev[4] or 0))
+                    + max(0.0, (curr[5] or 0) - (prev[5] or 0))
+                )
+            matrix[slot][date_idx] += val
+
+    # Slot labels: derive the clock time each slot represents
+    slots = []
+    for i in range(NUM_SLOTS):
+        mins_from_midnight = (i * 30 + 720) % 1440
+        h = mins_from_midnight // 60
+        m = mins_from_midnight % 60
+        slots.append(f'{h:02d}:{m:02d}')
+
+    max_val = max((v for row in matrix for v in row), default=0.0)
+
+    return jsonify({
+        'dates':  [d.strftime('%Y-%m-%d') for d in dates],
+        'slots':  slots,
+        'matrix': matrix,
+        'maxVal': max_val,
+        'metric': metric,
+    })
+
+
+
     return jsonify(load_images())
 
 

@@ -102,6 +102,35 @@
     </div>
   </div>
 
+  <!-- Activity Heatmap -->
+  <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-6">
+    <div class="flex flex-wrap items-center gap-4 mb-3">
+      <h3 class="font-bold text-hamster-700 text-sm uppercase tracking-wide flex-1">Activity Heatmap</h3>
+      <div class="flex gap-2">
+        <button id="heatmapBtnDistance" onclick="setHeatmapMetric('distance')"
+                class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">Distance (m)</button>
+        <button id="heatmapBtnActivity" onclick="setHeatmapMetric('activity')"
+                class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">Activity (s)</button>
+      </div>
+    </div>
+    <p class="text-xs text-hamster-400 mb-3">
+      Horizontal axis: date &nbsp;·&nbsp; Vertical axis: time of day (centred around midnight)
+      &nbsp;·&nbsp; Brighter cell = more active
+    </p>
+    <div id="heatmapContainer" class="overflow-x-auto">
+      <canvas id="heatmapCanvas" style="display:block;max-width:100%"></canvas>
+    </div>
+    <div id="heatmapNoData" class="hidden text-center py-6 text-hamster-400 text-sm italic">
+      No heatmap data available for the current date range.
+    </div>
+    <!-- Colour legend -->
+    <div class="flex items-center gap-2 mt-3">
+      <span class="text-xs text-hamster-500">Less</span>
+      <canvas id="heatmapLegend" width="120" height="12" style="border-radius:3px"></canvas>
+      <span class="text-xs text-hamster-500">More</span>
+    </div>
+  </div>
+
   <!-- Collapsible data table -->
   <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
     <button onclick="toggleTable()"

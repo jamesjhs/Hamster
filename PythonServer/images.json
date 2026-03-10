@@ -90,13 +90,13 @@
     "description": "Rest in peace little Diesel, he was 83 years old (died 17th November, 2025) ",
     "date": "2025-09-07"
   },  {
-    "filename": "Activity Heatmap.jpg",
-    "thumb": "thumbs/Activity Heatmap.jpg",
+    "filename": "ActivityHeatmap.jpg",
+    "thumb": "thumbs/ActivityHeatmap.jpg",
     "description": "Heatmap of Chocolate's running throughout the day",
     "date": "2025-09-07"
   },  {
-    "filename": "Distance Heatmap.jpg",
-    "thumb": "thumbs/Distance Heatmap.jpg",
+    "filename": "DistanceHeatmap.jpg",
+    "thumb": "thumbs/DistanceHeatmap.jpg",
     "description": "Heatmap of Chocolate's activity throughout the day",
     "date": "2025-09-07"
   }

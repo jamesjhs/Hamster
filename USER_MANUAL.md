@@ -31,7 +31,7 @@ The Hamster Monitor is a four-layer IoT system that tracks Chocolate's physical 
 | **Sensor hardware** | DOIT ESP32 DevKit V1 | Reads wheel rotation and motion-sensor events; serves raw data over HTTP |
 | **Data logger** | Python 3 on Raspberry Pi | Polls the ESP32 every 30 seconds and writes cumulative readings to CSV files |
 | **Web server** | Node.js / Express on Raspberry Pi | Reads the CSV files and the live ESP32 feed; renders pages and JSON APIs |
-| **Public website** | HTML / Tailwind CSS / Chart.js | Browser-rendered pages for live stats, analytics charts, gallery, and Kindle |
+| **Public website** | HTML / Tailwind CSS / Chart.js | Browser-rendered pages for live stats, analytics charts, blog, gallery, and Kindle |
 
 The old PHP-based "NAS Gateway" layer (in `NAS Gateway Code/`) pre-dates the Node.js app and is kept for reference. The Node.js app in `Node.js App/` is the **current active system**.
 
@@ -87,7 +87,8 @@ The old PHP-based "NAS Gateway" layer (in `NAS Gateway Code/`) pre-dates the Nod
              │  Public Website        │                     ┌───────────┴──┐
              │  /          (home)     │                     │  ESP32       │
              │  /analytics (charts)   │                     │  192.168.1.98│
-             │  /kindle    (no-JS)    │                     └──────────────┘
+             │  /blog      (blog)     │                     └──────────────┘
+             │  /kindle    (no-JS)    │
              │  /api/live             │
              │  /api/csv-data         │
              │  /api/csv-files        │
@@ -442,6 +443,18 @@ datalogger.py                    ESP32
 | `public/images/*.jpg` | _(uploaded manually)_ | Served statically at `/images/<filename>` |
 | `public/images/thumbs/*.jpg` | _(uploaded manually)_ | Served at `/images/thumbs/<filename>` |
 
+### PythonServer
+
+| File | Inputs | Outputs |
+|------|--------|---------|
+| `server.py` | CSV files, `images.json`, `blog.json`, ESP32 HTTP, browser requests | HTML pages, JSON API responses |
+| `images.json` | _(edited manually)_ | Gallery data (read by `load_images()`) |
+| `blog.json` | _(edited manually)_ | Blog post data (read by `load_blog_posts()`) |
+| `templates/blog.html` | `blog.json` via `load_blog_posts()` | Rendered blog page at `/blog` |
+| `static/js/analytics.js` | JSON from `/api/csv-data`, `/api/csv-files` | Chart.js charts, stat cards, data table (in browser) |
+| `static/images/*.jpg` | _(uploaded manually)_ | Served statically at `/static/images/<filename>` |
+| `static/images/thumbs/*.jpg` | _(uploaded manually)_ | Served at `/static/images/thumbs/<filename>` |
+
 ---
 
 ## 8. Back-End Function Reference
@@ -648,7 +661,20 @@ The page reloads automatically every **60 seconds** via an HTTP meta-refresh hea
 
 ---
 
-### 9.4 JSON APIs (for developers / integrations)
+### 9.4 Blog Page (`/blog`)
+
+Open `https://hamster.jahosi.co.uk/blog` to read diary-style posts about Chocolate.
+
+The page contains:
+- A chronological list of blog posts, newest first.
+- Each post shows a **title**, **publication date**, and one or more **paragraphs** of text.
+- Clicking a post title scrolls directly to that post (each article has a slug-based anchor).
+
+Posts are stored in `blog.json` next to `server.py` on the Pi and are loaded fresh on every request — no server restart is required after adding or editing posts. See [Section 10.11](#1011-add-a-new-blog-post) for instructions on adding posts.
+
+---
+
+### 9.5 JSON APIs (for developers / integrations)
 
 All APIs return JSON.
 
@@ -890,7 +916,46 @@ This requires changes across all three layers:
 
 ---
 
-## 11. Configuration Reference
+### 10.11 Add a New Blog Post
+
+Blog posts are stored as a JSON array in `PythonServer/blog.json` on the Pi. Each entry is an object with four fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `slug` | Yes | URL-safe identifier used as the anchor (`#slug`). Must be unique. Use lowercase letters, digits, and hyphens only. |
+| `title` | Yes | The post heading displayed on the page. |
+| `date` | Yes | Publication date in `YYYY-MM-DD` format. Used for display and for sorting (newest first). |
+| `content` | Yes | Post body text. Separate paragraphs with a blank line (`\n\n`). |
+
+**Steps:**
+
+1. **SSH into the Pi:**
+   ```bash
+   ssh pi@192.168.1.72
+   ```
+
+2. **Edit `blog.json`** (PythonServer deployment path):
+   ```bash
+   nano /home/pi/hamster/PythonServer/blog.json
+   ```
+
+3. **Add a new entry** to the JSON array (before or after existing entries — the server sorts by date):
+   ```json
+   {
+     "slug": "spring-adventures",
+     "title": "Spring Adventures",
+     "date": "2026-03-15",
+     "content": "Chocolate has been particularly active this week now that the days are getting longer.\n\nShe set a new distance record of 3.1 km in a single night, spread across both wheels."
+   }
+   ```
+   - Separate paragraphs with `\n\n` inside the `content` string.
+   - Make sure the file remains valid JSON (all objects separated by commas, array enclosed in `[…]`).
+
+4. **No server restart required** — `blog.json` is read fresh on every page request.
+
+**To remove a post:** delete the corresponding JSON object from the array (and remove the surrounding comma if needed to keep the JSON valid).
+
+---
 
 ### Environment Variables (`server.js`)
 

@@ -8,8 +8,8 @@ Combines two responsibilities in one process:
    readings are also written to ``longtermlog.csv`` and the ESP32 counters are
    reset to zero.
 
-2. **Web server** – a Flask application serves three pages (home, analytics,
-   Kindle) and a small JSON API consumed by the analytics page.
+2. **Web server** – a Flask application serves four pages (home, analytics,
+   blog, Kindle) and a small JSON API consumed by the analytics page.
 
 Usage::
 
@@ -200,6 +200,28 @@ def load_images():
         return []
 
 
+def load_blog_posts():
+    """Load blog posts from ``blog.json`` next to this file.
+
+    Posts are sorted newest-first by their ``date`` field.  Each post gains a
+    ``paragraphs`` list (the ``content`` string split on blank lines) so the
+    template can render each paragraph inside its own ``<p>`` element.
+    """
+    try:
+        blog_path = Path(__file__).parent / 'blog.json'
+        with open(blog_path, 'r') as fh:
+            posts = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    for post in posts:
+        raw = post.get('content', '')
+        post['paragraphs'] = [p.strip() for p in raw.split('\n\n') if p.strip()]
+
+    posts.sort(key=lambda p: p.get('date', ''), reverse=True)
+    return posts
+
+
 # ─── Background Poller ─────────────────────────────────────────────────────────
 
 _last_poll_hour = -1
@@ -308,6 +330,11 @@ def index():
 @app.route('/analytics')
 def analytics():
     return render_template('analytics.html')
+
+
+@app.route('/blog')
+def blog():
+    return render_template('blog.html', posts=load_blog_posts())
 
 
 @app.route('/kindle')

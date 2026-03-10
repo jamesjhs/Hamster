@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Blog – Chocolate's Monitor{% endblock %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold text-hamster-800 mb-1">📝 Chocolate's Blog</h1>
+  <p class="text-hamster-500 text-sm mb-8">Notes and updates from life with a Russian Dwarf Hamster.</p>
+
+  {% if posts %}
+    <div class="space-y-8">
+      {% for post in posts %}
+        <article id="{{ post.slug|e }}"
+                 class="bg-white rounded-xl shadow-sm border border-hamster-100 p-6">
+          <header class="mb-4">
+            <h2 class="text-xl font-bold text-hamster-800 leading-snug">
+              <a href="#{{ post.slug|e }}" class="hover:text-hamster-600 transition-colors">
+                {{ post.title|e }}
+              </a>
+            </h2>
+            {% if post.date %}
+              <p class="text-xs text-hamster-400 mt-1 uppercase tracking-wide font-semibold">
+                {{ post.date|e }}
+              </p>
+            {% endif %}
+          </header>
+          <div class="text-hamster-700 text-sm leading-relaxed space-y-3">
+            {% for paragraph in post.paragraphs %}
+              <p>{{ paragraph|e }}</p>
+            {% endfor %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-8 text-center">
+      <p class="text-4xl mb-3">📝</p>
+      <p class="text-hamster-500 italic text-sm">
+        No posts yet — add entries to
+        <code class="bg-hamster-100 px-1 rounded">blog.json</code>
+        in the PythonServer directory.
+      </p>
+    </div>
+  {% endif %}
+{% endblock %}

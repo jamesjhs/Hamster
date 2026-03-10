@@ -2,6 +2,8 @@
 
 {% block title %}Chocolate's Monitor{% endblock %}
 
+{% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
+
 {% block content %}
   <h1 class="text-3xl font-bold text-hamster-800 mb-1">
     🐹 Chocolate's Live Monitor
@@ -53,7 +55,14 @@
       <div class="text-4xl leading-none">⏱️</div>
       <div>
         <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Active Today</p>
-        <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ today_motion }} s</p>
+        {% set motion_total = (esp32.motion1count or 0) + (esp32.motion2count or 0) + (esp32.motion3count or 0) %}
+        {% set motion_mins = (motion_total // 60)|int %}
+        {% set motion_secs = motion_total % 60 %}
+        {% if motion_mins > 0 %}
+          <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ motion_mins }} min {{ "%.0f"|format(motion_secs) }} s</p>
+        {% else %}
+          <p class="text-2xl font-bold text-hamster-800 leading-tight">{{ "%.1f"|format(motion_secs) }} s</p>
+        {% endif %}
         <p class="text-xs text-hamster-400 mt-0.5">total motion sensor time</p>
       </div>
     </div>
@@ -90,8 +99,8 @@
       </div>
     </div>
     <p class="text-xs text-hamster-400 mt-5">
-      Data cached for 30 s. &nbsp;
-      <a href="javascript:location.reload()" class="underline hover:text-hamster-600">Refresh now</a>
+      Auto-refreshes every 60 s. &nbsp;
+      <button type="button" onclick="window.location.reload()" class="underline hover:text-hamster-600 cursor-pointer">Refresh now</button>
       &nbsp;·&nbsp;
       <a href="/analytics" class="underline hover:text-hamster-600">View full analytics →</a>
     </p>

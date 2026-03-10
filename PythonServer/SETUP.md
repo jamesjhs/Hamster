@@ -1,4 +1,4 @@
-# Python Server – Setup Guide
+# PythonServer – Setup Guide
 
 This folder contains a self-contained Python application that replaces both
 the NAS PHP gateway and the Node.js web server, reducing the stack to just
@@ -44,7 +44,7 @@ the NAS PHP gateway and the Node.js web server, reducing the stack to just
 
 **Linux / macOS**
 ```bash
-cd "Python Server"
+cd PythonServer
 
 # (Recommended) Create a virtual environment
 python3 -m venv .venv
@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 **Windows (PowerShell)**
 ```powershell
-cd "Python Server"
+cd PythonServer
 
 # (Recommended) Create a virtual environment
 python -m venv .venv
@@ -75,7 +75,7 @@ pip install -r requirements.txt
 
 **Windows (Command Prompt)**
 ```cmd
-cd "Python Server"
+cd PythonServer
 
 rem (Recommended) Create a virtual environment
 python -m venv .venv
@@ -150,11 +150,11 @@ After=network.target
 
 [Service]
 User=pi
-WorkingDirectory=/home/pi/Hamster/Python Server
+WorkingDirectory=/home/pi/Hamster/PythonServer
 Environment=ESP32_IP=192.168.1.98
 Environment=CSV_DIR=/var/hamsterlogger
 Environment=PORT=4000
-ExecStart=/home/pi/Hamster/Python Server/.venv/bin/python server.py
+ExecStart=/home/pi/Hamster/PythonServer/.venv/bin/python server.py
 Restart=on-failure
 RestartSec=5
 
@@ -180,15 +180,15 @@ sudo journalctl -u hamster -f   # follow logs
 4. **Triggers** tab → New → *At startup*.
 5. **Actions** tab → New:
    - *Action:* Start a program
-   - *Program/script:* `"C:\path\to\Python Server\.venv\Scripts\python.exe"`
+   - *Program/script:* `C:\path\to\PythonServer\.venv\Scripts\python.exe`
    - *Add arguments:* `server.py`
-   - *Start in:* `"C:\path\to\Python Server"`
+   - *Start in:* `C:\path\to\PythonServer`
    > Wrap any path that contains spaces in double quotes.
 6. **Environment variables** — add them in the action or via a small
    wrapper script:
 
    ```powershell
-   # start_hamster.ps1  (place in the Python Server folder)
+   # start_hamster.ps1  (place in the PythonServer folder)
    $env:ESP32_IP = "192.168.1.98"
    $env:CSV_DIR  = "C:\hamsterlogger"
    $env:PORT     = "4000"
@@ -196,7 +196,7 @@ sudo journalctl -u hamster -f   # follow logs
    ```
 
    Then point Task Scheduler's *Program/script* at `powershell.exe` with
-   *Arguments* `-File "C:\path\to\Python Server\start_hamster.ps1"`.
+   *Arguments* `-File "C:\path\to\PythonServer\start_hamster.ps1"`.
 7. Click **OK** and enter your Windows password if prompted.
 
 ---

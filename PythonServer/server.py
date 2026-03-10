@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hamster Monitor – Python Server.
+"""Hamster Monitor – PythonServer.
 
 Combines two responsibilities in one process:
 

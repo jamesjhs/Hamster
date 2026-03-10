@@ -1,26 +1,110 @@
 [
   {
-    "slug": "settling-in",
-    "title": "Settling In",
-    "date": "2025-09-10",
-    "content": "Chocolate arrived home three days ago and has been busy exploring every corner of her new cage. She spent the first night rearranging all of the bedding into one enormous pile in the back-left corner, then tunnelled through it for several hours. The wheel sensors recorded her first tentative spins just after midnight — only a few metres, but she seemed very pleased with herself.\n\nShe has discovered the scatter-feeding tray and appears to be hoarding sunflower seeds somewhere underneath the bedding mound. We have not found the stash yet, but the suspicious bulge suggests it is substantial."
+    "slug": "started-the-project",
+    "title": "Started the project",
+    "date": "2024-12-15",
+    "content": "Identified \"need\" - how do we know how healthy our hamster is? When does he do his exercise? How fast does he run? How far does he run? Let's get a reed switch and a magnet on his wheel, and do some calculations using C++ on an Espressif ESP32 WROOM32 DEVKIT1 that I've got lying around... (I'd already proved the code concept using a Teensy 2.0 (Arduino-like chip), counting wheel revolutions and basic maths to calculate activity time/etc.) This code step was simply to test the WiFi capabilities of the ESP32 and run a rudimentary webserver displaying the status of a connected switch."
   },
   {
-    "slug": "first-marathon-night",
-    "title": "First Marathon Night",
-    "date": "2025-10-04",
-    "content": "Last night the data logger recorded Chocolate's longest single run so far: 2.3 km on wheel 1 between 01:14 and 03:47. That is a personal best by a comfortable margin. The average speed over the session was 0.31 m/s, with a peak of 0.89 m/s just after 02:30 — she must have been in a real hurry.\n\nBy dawn she had also clocked 45 minutes on the ground floor and 20 minutes on the middle level, suggesting a full night of activity. The motion sensors on the top level were quiet, which usually means she was saving energy for the wheel."
+    "slug": "adding-wheel-spin-data",
+    "title": "Adding wheel spin data",
+    "date": "2024-12-16",
+    "content": "Iterative update to the code to calculate wheel circumference (i.e., diameter * pi) and a cumulative log of distance (i.e., distance = distance + circumference every time the wheel spun round by one revolution. Capturing a wheel spin event is not as simple as if (digitalRead(reedSwitch)) {wheelSpins ++;} because this would generate a rapid increase in the value of wheelSpins for however long the switch was active. Instead first a varaible reedSwitchState must be set to high on detecting a trigger, and and if() statement created to only increment wheelSpins if the value was previously == 0. The resetting of the switch to LOW did the opposite, i.e., setting reedSwitchState to LOW as well, and only doing so if the value was previously == 1:\n\n  if (digitalRead(pinSwitch)) {\n    if (switchPressed == 0) {\n      digitalWrite(led, 1);\n      digitalWrite(ledReed, 1);\n      delay(10);\n      digitalWrite(led, 0);\n      digitalWrite(ledReed, 0); // at this time an LED was connected as a debugging tool to determine the if statements were working.\n      switchPressed = 1;\n      wheelLast = millis();\n      Serial.print(\"Wheel spin at \");\n      Serial.println(millis()/1000);\n      switchCount++;\n    }\n  } else {\n    if (switchPressed == 1) {\n      switchPressed = 0;\n    }\n  } //end if pinSwitch\n\nInstantaneous speed was calculated by taking the millis() value at the time the reed switch was triggered last time and subtracting this from the current millis() value, then dividing the wheel circumference by this difference in time. Top speed was simply determined by if (speednow > maxspeed) {maxspeed = speednow}; The ESP32's webpage at this point simply dumped the variables reed switch state and distance travelled to its only response page."
   },
   {
-    "slug": "vet-check-all-clear",
-    "title": "Vet Check — All Clear",
-    "date": "2025-11-22",
-    "content": "Chocolate had her first veterinary check-up today. The vet confirmed she is in excellent health: a healthy weight of 42 g (right in the middle of the normal range for a Russian Dwarf), bright eyes, clean teeth, and a glossy coat.\n\nThe vet was impressed to hear about the monitoring system and joked that Chocolate probably has better fitness tracking than most humans. We are pleased to report that all those kilometres on the wheel are doing her good. Next check-up is scheduled for spring."
+    "slug": "adding-wheelspin-data",
+    "title": "Adding wheelspin data",
+    "date": "2024-12-16",
+    "content": "Iterative update to the code to calculate wheel circumference (i.e., diameter * pi) and a cumulative log of distance (i.e., distance = distance + circumference every time the wheel spun round by one revolution. Instantaneous speed was calculated by taking the millis() value at the time the reed switch was triggered last time and subtracting this from the current value, then dividing the wheel circumference by this difference in time. Top speed was simply determined by if (speednow > maxspeed) {maxspeed = speednow};. The ESP32's webpage at this point simply dumped the variables reed switch state and distance travelled to its only response page."
   },
   {
-    "slug": "winter-habits",
-    "title": "Winter Habits",
-    "date": "2025-12-30",
-    "content": "As the days have grown shorter, Chocolate's activity patterns have shifted noticeably. She now starts her main running session about an hour later than she did in autumn — typically beginning around 22:00 rather than 21:00 — and her longest active periods tend to cluster between midnight and 04:00.\n\nShe also seems to spend more time on the middle and top levels of the cage during daytime naps, perhaps because the heat rises and those platforms are a little warmer. Total daily distances are slightly down compared to October, but still averaging a respectable 1.4 km per night across both wheels."
+    "slug": "adding-a-motion-sensor",
+    "title": "Adding a motion sensor",
+    "date": "2024-12-17",
+    "content": "Using an arduino-compatible motion sensor, a second variable, i.e., tracking movement, was possible. The sensor goes high when it detects movement, and drops to low again when movement ceases. The variable motionCount was created to simply log the number of times motion was detected, i.e., motionCount = motionCount++; whenever if (digitalRead(pinMotion)) became true."
+  },
+  {
+    "slug": "updating-the-server-outputs-to-make-an-api",
+    "title": "Updating the server outputs to make an API",
+    "date": "2024-12-18",
+    "content": "Now the rudimentary steps were understood, it was time to take things further and enable a more human interface for the ESP32, as well as the ability to poll it remotely. It wouldn't be sensible to have it accessed straight through a firewall via an open port, considering the potential for easy hacking, so polling data from it via a server call i.e., http://esp32.local/d/motionCount meant that a more secure device, such as a Raspberry Pi or even NAS, could query it and display the data sensibly. So the following variables were created to allow this:\n- distance - total distance travelled, i.e., motionCount * wheelCircumference\n- maxspeed - as described above\n- avespeed - total distance / time spent moving (i.e., ignoring gaps > 10 seconds)\n- millisnow - current boot epoch time, an unsigned long, for the ESP32, in milliseconds\n- lastwheelmillis - value of millis() last time a wheel spin was detected\n- lastmotionmillis - ditto for movement being sensed\n- motioncount - number of times motion detected"
+  },
+  {
+    "slug": "introducing-python-and-the-raspberry-pi",
+    "title": "Introducing PYTHON and the Raspberry Pi",
+    "date": "2024-12-19",
+    "content": "It now became highly necessary to not just display the data from the chip in a sensible manner, using PHP calls from a Raspberry Pi running Apache 3 and PHP, but also I thought it would be nice to have a bit more granular data, not just knowing total distances travelled and maximum speeds, but the ability to scroll back through time and see how the data has changed. Thus, Python was invoked, to regularly poll data from the ESP32 and store the variables below into a .csv file:\n- distance\n- motionCount\n\nPython (a surprisingly pleasant programming language to use following the data type-pernickety C++), was able to simply loop through its polling code,\n\nimport requests\nimport time\nimport os\nimport argparse\n\ndef retrieveandsave(i):\n    distance = str(requests.get(\"http://\" + esp32IP + \"/d/distance\").content)\n    distance = distance.replace(\"b\",\"\")\n    distance = distance.replace(\"'\",\"\")\n    distance = str(float(distance))\n\n    motioncount = str(requests.get(\"http://\" + esp32IP + \"/d/motioncount\").content)\n    motioncount = motioncount.replace(\"b\",\"\")\n    motioncount = motioncount.replace(\"'\",\"\")\n    motioncount = str(int(round(float(motioncount))))\n\n    outstring = (str(time.time()) +\",\"+ distance +\",\"+ motioncount)\n    with open(outfile, 'a') as f:\n        print(outstring, end=\"\\n\", file=f)\n\n    print(\"Saved line \" + str(i))\n    time.sleep(delay)\n\neither indefinitely or for a certain number of repetitions, as defined by input arguments to the program. It wasn't necessary to compile the script to run stand-alone as it doesn't need to be real-time or processor-intensive, simply pinging the ESP32 every 30 seconds or so is enough to generate a fairly large .CSV file."
+  },
+  {
+    "slug": "making-a-lovely-front-end",
+    "title": "Making a lovely front-end",
+    "date": "2024-12-20",
+    "content": "This webpage is the end-result of generating the CSV file mentioned above, and parsing it out to a \"user-friendly\" webpage - which is still a work-in-progress of course. The CSV file is taken by PHP server-side, and broken down into individual rows of the array $data[], using the following code,\n\n$fileData=fopen($csvfile,'r');\nwhile (($line = fgetcsv($fileData)) !== FALSE) {\n   $data[] = $line;\n}\n$dataLength = sizeof($data);\n\nEach line of the resulting array is then checked to see if it matches the line above, and if so, ignored. At present the data is simply pumped out into a tabular format using good old fashioned HTML tables, but the plan going forward is to make this data table adjustable in JavaScript to allow a specific time windows, and also eventually to make a vector graphics (SVG) graph of time vs. distance travelled, motion triggers, and possibly even running speed (over the captured data polled windows of 30-45 seconds). As of the time of writing, I've just about managed to make a sine wave out of the SVG with a bit of text overlay, and the data is in very long scrolling table."
+  },
+  {
+    "slug": "unexpected-spanner-in-the-works",
+    "title": "Unexpected spanner in the works",
+    "date": "2024-12-22",
+    "content": "A very excitable wife and children have resulted in Diesel the hamster being gifted a three-layer house, instead of the bungalow cage in which he was inhabiting up until today. His new mansion now has two wheels, slides, and an overhanging sleeping area. This means I'm going to have to adapt my ESP32 wiring and code to account for THREE motion sensors, and TWO reed switches, as opposed to simply one of each! Amazon orders have been made..."
+  },
+  {
+    "slug": "three-movement-sensors-and-two-wheel-sensors",
+    "title": "Three movement sensors and two wheel sensors",
+    "date": "2024-12-23",
+    "content": "The challenge accepted - and thankfully renaming a few variables and (perhaps lazily) copying some code to define if() loops for each wheel and each level of the cage has resulted in being able to output several variables where once lay only two, namely, distance1 and distance2, and motion1count, motion2count and motion3count. The info logger on the Raspberry Pi needed updating to record five variables instead of three, and additional variables wheelNumberLast and motionLevelLast were created so that the output can reflect which wheel was used last and which level Diesel was last seen on."
+  },
+  {
+    "slug": "javascript-chart-js-updates",
+    "title": "Javascript Chart.js updates",
+    "date": "2024-12-28",
+    "content": "A fair amount of work went into the client-side behind-the-scenes JavaScript today, with the abandonment of the original static SVG-based chart output in preference for an includable publicly-available JavaScript library called chart.js, \"one of the simplest visualization libraries for JavaScript, and comes with the many built-in chart types\". There's a small amount of server-side work in the PHP file, to generate five XY lists for the scatterplot, which annoyingly cannot accept simply array columns but must be in the format \"x: 000, y: 000\"; ideally it'd be nice to just have a selector enabling or disabling array column calls (i.e., dataarray[0] vs dataarray[4], but that seems not to be possible."
+  },
+  {
+    "slug": "javascript-chart-js-updates-2",
+    "title": "Javascript Chart.js updates",
+    "date": "2024-12-29",
+    "content": "More front-end updating behind the scenes, now the chart has three lines and is over a date axis rather than UNIX time; also, a legend now exists. The table output has also had a spruce-up with cell background colours reflecting the cell values (via incorporating the formula ((250-$contrast)+(($maxMotion1abs - $data[$row][4])/$maxMotion2abs)*$contrast) within the style=\"background-color:rgb(r,g,b);\" element."
+  },
+  {
+    "slug": "events-become-seconds",
+    "title": "Events become seconds",
+    "date": "2024-12-31",
+    "content": "The motion sensors have two different output modes, depending on the position of Jumper J1 (the external-most setting being signal ON trigger, the inner-most setting being signal WHILE triggered). A re-write of the ESP32 C++ code to summate the time taken while triggered (float), as opposed to just incrementing a trigger count (integer), I feel makes for more granular data. The sensors aren't the world's most reliable methods of determining fine-detected movement, as they have only a limited field of view (especially in something so small as a hamster cage), and also on cessation of movement detection, require three seconds to be reactivated. However, if Diesel keeps moving in front of their fields of view during this time, his movement should be recorded in seconds (to 2 decimal places). The changed code was as follows, to accommodate seconds instead of just a simple count:\n\n  if (digitalRead(pinMotion1)) {\n    if (motion1Active == 0) {\n      digitalWrite(ledMotion, 1);\n      motion1Active = 1;\n      motionLevelLast = 1;\n      lastmotion1millis = millis();\n      lastmotionmillis = lastmotion1millis;\n      Serial.print(\"Motion detected at \");\n      Serial.println(millis() / 1000);\n      motion1Count++;\n    }\n  } else {\n    if (motion1Active == 1) {\n      motion1Active = 0;\n      duration1Active = (millis() - lastmotion1millis) / 1000.00;\n      totalDuration1 = totalDuration1 + duration1Active;\n      digitalWrite(ledMotion, 0);\n    }\n  }  //end if pinMotion1"
+  },
+  {
+    "slug": "wheels-now-attached",
+    "title": "Wheels now attached",
+    "date": "2025-01-04",
+    "content": "Hurrah! After quite a long wait, I had a brainwave while trying to measure how far the reed switch (basically a magnetic on/off sensor) would need to protrude into the cage. I had initially thought I'd 3D print something to lie alongside his wheel, anchored from the outside of the cage, and have the reed switch slide in to. But in measuring the wheel with a biro, it hit me: use a biro! So 10 minutes in the garage cutting 5mm thick slivers of 2x2 pine and drilling four holes for cable ties and one hole for the biro, and sawing the tube of a biro to length, and we now have a working wheel sensor. Plugged it into the breadboard and she worked off the bat!"
+  },
+  {
+    "slug": "daily-logs-now-available",
+    "title": "Daily Logs now available!",
+    "date": "2025-01-06",
+    "content": "A bit of back-end fiddling today, I have updated the Python script to use  outfile = datetime.now().strftime(\"%Y\") + datetime.now().strftime(\"%m\") + datetime.now().strftime(\"%d\") + \".csv\" instead of a standard \"datalogger.csv\" filename, thereby allowing daily logs to be generated on the Raspberry Pi, changing name at midnight. The Pi's webserver now has a simple script simply to find .csv files within the logging directory, which in turn is called by the front-end webpage and presented as a drop-down selection box to choose which logfile you want to view."
+  },
+  {
+    "slug": "daily-reset-of-variables",
+    "title": "Daily reset of variables",
+    "date": "2025-01-07",
+    "content": "Just a quick one. Tried to figure out the best way to do allow the logfiles and subsequent information to display data fresh for each day. I thought about rewriting the python code in the Raspberry Pi to take the difference between two polled readings from the ESP32, and even rewriting the ESP32 code to simply output said difference between each access, but quickly realised the workload doing this would involve re-writing the scripts for every bit of the data analysis side (i.e., scripts for the graphs, tables, and csv file generator) AND refashioning each logfile to incorporate the change to the parsers. Instead, it seems obvious now: at time the value of the current hour is LESS than the previously stored value, i.e., 0 vs 23 then call the RESET programme from the ESP32. In the case of clocks going back, because they only do this by one hour, this should not fail (as 01:59:59 rolls over to 01:00:00).\n\nThe limitation to this method is that of power failure, whereupon the ESP32 chip will reset all its data back to 0, so a step-change would be noted within the CSV data, and an according severe negative shift be noted in the table and presented data. I will amend the parser to recognise if a negative result occurs, and simply add on the difference to subsequent lines."
+  },
+  {
+    "slug": "re-jigging-of-the-log-files-and-enabling-daily-digests",
+    "title": "Re-jigging of the log files and enabling daily digests",
+    "date": "2025-01-13",
+    "content": "Well I'm sorry it's been a while - though I somewhat doubt there's anyone actually reading this but if you are there, please drop me a line using the main website Comments page (click here!). I've been letting the logs build up a bit, with keen interest, and notice that Diesel is indeed using both wheels, though preferring his upper one (away from his sleeping quarters), and is active once every three hours of so day or night - which is interesting. I've been editing the logfiles so that they are in keeping with the \"up to date\" standard of the logfiles now, i.e., changing filename at midnight, and providing only a cumulative log from 0 each day. Via the addition of the following code within the main Raspberry Pi python script, a new file is also being made which saves Diesel's total efforts of the day into a summary logfile, though I haven't yet written a parser for this.\n\n    if lasthour > int(datetime.now().strftime(\"%H\")):\n        outstring = (str(time.time()) + \",\"+ distance1 + \",\"+ distance2 +\",\"+ motion1count+\",\"+ motion2count+\",\"+ motion3count)\n        outfile = \"longtermlog.csv\"\n        with open(outfile, 'a') as f:\n            print(outstring, end=\"\\n\", file=f)\n        reset = str(requests.get(\"http://\" + esp32IP + \"/reset\").content)\n\n    else:\n        outstring = (str(time.time()) + \",\"+ distance1 + \",\"+ distance2 +\",\"+ motion1count+\",\"+ motion2count+\",\"+ motion3count)\n        outfile = datetime.now().strftime(\"%Y%m%d\") + \".csv\"\n        with open(outfile, 'a') as f:\n            print(outstring, end=\"\\n\", file=f)"
+  },
+  {
+    "slug": "data-analysis-templates-updated-logfile-selector-updated",
+    "title": "Data analysis templates updated, logfile selector updated",
+    "date": "2025-01-28",
+    "content": "Changed the way the log file selector works on the Data Table / Graph page, so now the drop-down shows the dd/mm/yyyy result of the logfile name instead of its raw csv file value. Also allows the inclusion of longtermlog.csv to be referenced, and in a human-friendly way. Behind the scenes the logfiles are still called via their filenames and passed to the datatable.php page. Graph programming was a bit tricky as the original parser script was designed for cumulative data rather than absolute, but this was tweaked using an if/else statement in the code, i.e., if ( $logfile = \"longtermlog.csv\" ) { parse as non-cumulative } else { parse as cumulative };.\n\nAlso now edited is the basicdata.php file, which is now able to summate the daily log values from the longtermlog.csv file enabling long-term totals of data since logging began. Turns out that little Diesel has run quite a long way since the early days: 2.3km and counting!"
+  },
+  {
+    "slug": "plans-for-the-future",
+    "title": "Plans for the future",
+    "date": "",
+    "content": "The following will be updated as more progress is made...\n- Making a suitable case for the veroboard instead of having the breadboards just sitting below Diesel's cage\n- Data analysis metrics?"
   }
 ]

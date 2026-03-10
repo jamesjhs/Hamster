@@ -28,6 +28,7 @@ import os
 import re
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -86,13 +87,19 @@ def get_esp32_data():
         'motionLevelLast', 'lastwheelmillis', 'lastmotionmillis',
     ]
 
+    # Fetch all endpoints in parallel so a slow/unresponsive ESP32 only
+    # blocks for one timeout duration (3 s) rather than N × 3 s.
     raw = {}
-    for ep in endpoints:
-        val = _http_get(f'{base}/{ep}')
-        try:
-            raw[ep] = float(val)
-        except ValueError:
-            raw[ep] = 0.0
+    with ThreadPoolExecutor(max_workers=len(endpoints)) as pool:
+        future_to_ep = {pool.submit(_http_get, f'{base}/{ep}'): ep for ep in endpoints}
+        for future in as_completed(future_to_ep):
+            ep = future_to_ep[future]
+            try:
+                val = future.result()
+                raw[ep] = float(val)
+            except Exception as exc:
+                log.debug('ESP32 endpoint %s error: %s', ep, exc)
+                raw[ep] = 0.0
 
     # ESP32 is considered online when millisnow returns a positive uptime value.
     raw['esp32Online'] = raw.get('millisnow', 0) > 0
@@ -424,12 +431,9 @@ def api_status():
         )
         cached = _esp32_cache is not None
     return jsonify({
-        'csvDir': str(CSV_DIR),
         'longtermlogExists': longterm_exists,
         'longtermlogRows': longterm_rows,
         'dailyFileCount': len(daily_files),
-        'dailyFiles': daily_files,
-        'esp32Ip': ESP32_IP,
         'cacheAgeMs': cache_age,
         'esp32Cached': cached,
     })

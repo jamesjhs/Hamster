@@ -280,13 +280,32 @@ function renderTable({ rows, type }) {
 
     const tr        = document.createElement('tr');
     tr.className    = i % 2 === 0 ? '' : 'bg-hamster-50';
-    const w1        = (row[1] || 0).toFixed(2);
-    const w2        = (row[2] || 0).toFixed(2);
-    const wTot      = ((row[1] || 0) + (row[2] || 0)).toFixed(2);
-    const m1        = (row[3] || 0).toFixed(1);
-    const m2        = (row[4] || 0).toFixed(1);
-    const m3        = (row[5] || 0).toFixed(1);
-    const mTot      = ((row[3] || 0) + (row[4] || 0) + (row[5] || 0)).toFixed(1);
+
+    // CSV columns: 0=timestamp, 1=wheel1_m, 2=wheel2_m, 3=motion1_s, 4=motion2_s, 5=motion3_s
+    let w1, w2, wTot, m1, m2, m3, mTot;
+    if (isLongterm || i === 0) {
+      w1   = (row[1] || 0).toFixed(2);
+      w2   = (row[2] || 0).toFixed(2);
+      wTot = ((row[1] || 0) + (row[2] || 0)).toFixed(2);
+      m1   = (row[3] || 0).toFixed(1);
+      m2   = (row[4] || 0).toFixed(1);
+      m3   = (row[5] || 0).toFixed(1);
+      mTot = ((row[3] || 0) + (row[4] || 0) + (row[5] || 0)).toFixed(1);
+    } else {
+      const prev = rows[i - 1];
+      const dw1  = Math.max(0, (row[1] || 0) - (prev[1] || 0));
+      const dw2  = Math.max(0, (row[2] || 0) - (prev[2] || 0));
+      const dm1  = Math.max(0, (row[3] || 0) - (prev[3] || 0));
+      const dm2  = Math.max(0, (row[4] || 0) - (prev[4] || 0));
+      const dm3  = Math.max(0, (row[5] || 0) - (prev[5] || 0));
+      w1   = dw1.toFixed(2);
+      w2   = dw2.toFixed(2);
+      wTot = (dw1 + dw2).toFixed(2);
+      m1   = dm1.toFixed(1);
+      m2   = dm2.toFixed(1);
+      m3   = dm3.toFixed(1);
+      mTot = (dm1 + dm2 + dm3).toFixed(1);
+    }
 
     tr.innerHTML = `
       <td class="px-2 py-1">${timeStr}</td>

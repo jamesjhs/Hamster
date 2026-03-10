@@ -102,6 +102,12 @@
     "content": "Changed the way the log file selector works on the Data Table / Graph page, so now the drop-down shows the dd/mm/yyyy result of the logfile name instead of its raw csv file value. Also allows the inclusion of longtermlog.csv to be referenced, and in a human-friendly way. Behind the scenes the logfiles are still called via their filenames and passed to the datatable.php page. Graph programming was a bit tricky as the original parser script was designed for cumulative data rather than absolute, but this was tweaked using an if/else statement in the code, i.e., if ( $logfile = \"longtermlog.csv\" ) { parse as non-cumulative } else { parse as cumulative };.\n\nAlso now edited is the basicdata.php file, which is now able to summate the daily log values from the longtermlog.csv file enabling long-term totals of data since logging began. Turns out that little Diesel has run quite a long way since the early days: 2.3km and counting!"
   },
   {
+    "title": "Using python as the main data parser AND the webserver",
+    "slug": "python-data-parser-and-webserver",
+    "date":  "2026-03-10",
+    "content": "The project had been using FOUR different pieces of hardware to do the job of collecting data (ESP32), parsing data (Raspberry Pi), serving a website (Network-attached storage), and hosting the content (a paid webserver) - which seems a little superfluous. Instead, using Python to run the back-end webserver AND retrieve the data from the ESP32 makes a lo more sense, so welcome to the Python webserver!"
+  },
+  {
     "slug": "plans-for-the-future",
     "title": "Plans for the future",
     "date": "",

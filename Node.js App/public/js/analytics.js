@@ -45,10 +45,29 @@ function fmtFilename(f) {
 /**
  * Set the date-range picker to the last `days` days and reload data.
  * Pass 0 for "all time" (uses a far-past start date).
+ * Pass 1 for "today" — selects today's intraday CSV if available.
  */
 function setPreset(days) {
   const to   = new Date();
   const from = new Date();
+
+  // Special case: "today" → prefer the intraday CSV for today.
+  if (days === 1) {
+    const pad  = (n) => String(n).padStart(2, '0');
+    const yyyy = to.getFullYear();
+    const mm   = pad(to.getMonth() + 1);
+    const dd   = pad(to.getDate());
+    const todayFile = `${yyyy}${mm}${dd}.csv`;
+    const sel   = document.getElementById('fileSelect');
+    const opt   = Array.from(sel.options).find((o) => o.value === todayFile);
+    if (opt) {
+      sel.value = todayFile;
+      document.getElementById('dateRangePicker').style.display = 'none';
+      loadData();
+      return;
+    }
+  }
+
   if (days > 0) {
     from.setDate(from.getDate() - days + 1);
   } else {

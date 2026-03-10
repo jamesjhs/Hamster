@@ -1,26 +1,104 @@
 [
   {
-    "filename": "chocolate-nest.jpg",
-    "thumb": "thumbs/chocolate-nest-thumb.jpg",
-    "description": "Chocolate peeking out of his nest in the top level",
+    "filename": "1.jpg",
+    "thumb": "thumbs/1.jpg",
+    "description": "Magnet attached to the hamster wheel",
     "date": "2025-09-07"
-  },
-  {
-    "filename": "chocolate-wheel.jpg",
-    "thumb": "thumbs/chocolate-wheel-thumb.jpg",
-    "description": "Chocolate in full sprint on the bottom wheel at midnight",
-    "date": "2025-10-12"
-  },
-  {
-    "filename": "chocolate-food.jpg",
-    "thumb": "thumbs/chocolate-food-thumb.jpg",
-    "description": "Chocolate stuffing his cheeks with sunflower seeds",
-    "date": "2025-11-03"
-  },
-  {
-    "filename": "chocolate-explore.jpg",
-    "thumb": "thumbs/chocolate-explore-thumb.jpg",
-    "description": "Exploring the ground level with his trademark suspicious look",
-    "date": "2025-12-25"
+  },  {
+    "filename": "2.jpg",
+    "thumb": "thumbs/2.jpg",
+    "description": "Original breadboard and single-layer cage, with reed switch",
+    "date": "2025-09-07"
+  },  {
+    "filename": "2a.jpg",
+    "thumb": "thumbs/2a.jpg",
+    "description": "Reed switch on side of cage",
+    "date": "2025-09-07"
+  },  {
+    "filename": "3.jpg",
+    "thumb": "thumbs/3.jpg",
+    "description": "Motion sensor (center pin = signal) ",
+    "date": "2025-09-07"
+  },  {
+    "filename": "4.jpg",
+    "thumb": "thumbs/4.jpg",
+    "description": "Motion sensor attached to cage",
+    "date": "2025-09-07"
+  },  {
+    "filename": "5.jpg",
+    "thumb": "thumbs/5.jpg",
+    "description": "Motion sensor attached to cage",
+    "date": "2025-09-07"
+  },  {
+    "filename": "6.jpg",
+    "thumb": "thumbs/6.jpg",
+    "description": "Soldering the motion sensor plugs",
+    "date": "2025-09-07"
+  },  {
+    "filename": "6a.jpg",
+    "thumb": "thumbs/6a.jpg",
+    "description": "Extended breadboard with multiple inputs",
+    "date": "2025-09-07"
+  },  {
+    "filename": "7.jpg",
+    "thumb": "thumbs/7.jpg",
+    "description": "Multiple motion sensors attached to cage",
+    "date": "2025-09-07"
+  },  {
+    "filename": "7a.jpg",
+    "thumb": "thumbs/7a.jpg",
+    "description": "Diesel's new 3-layer cage",
+    "date": "2025-09-07"
+  },  {
+    "filename": "8.jpg",
+    "thumb": "thumbs/8.jpg",
+    "description": "Extended breadboard plus inputs",
+    "date": "2025-09-07"
+  },  {
+    "filename": "9.jpg",
+    "thumb": "thumbs/9.jpg",
+    "description": "Breadboard and power supply (via LM317's)",
+    "date": "2025-09-07"
+  },  {
+    "filename": "10.jpg",
+    "thumb": "thumbs/10.jpg",
+    "description": "Underside of veroboard",
+    "date": "2025-09-07"
+  },  {
+    "filename": "11.jpg",
+    "thumb": "thumbs/11.jpg",
+    "description": "Topside of veroboard",
+    "date": "2025-09-07"
+  },  {
+    "filename": "12.jpg",
+    "thumb": "thumbs/12.jpg",
+    "description": "Reed switch and wheel spin sensor assesmbly (biro and a bit of wood)",
+    "date": "2025-09-07"
+  },  {
+    "filename": "13.jpg",
+    "thumb": "thumbs/13.jpg",
+    "description": "Wheel spin sensor cable tied onto the cage",
+    "date": "2025-09-07"
+  },  {
+    "filename": "chocolate.jpg",
+    "thumb": "thumbs/chocolate.jpg",
+    "description": "Diesel peeking out of his nest in the top level",
+    "date": "2025-09-07"
+  },  {
+    "filename": "diesel.jpg",
+    "thumb": "thumbs/diesel.jpg",
+    "description": "Rest in peace little Diesel, he was 83 years old (died 17th November, 2025) ",
+    "date": "2025-09-07"
+  },  {
+    "filename": "Activity Heatmap.jpg",
+    "thumb": "thumbs/Activity Heatmap.jpg",
+    "description": "Heatmap of Chocolate's running throughout the day",
+    "date": "2025-09-07"
+  },  {
+    "filename": "Distance Heatmap.jpg",
+    "thumb": "thumbs/Distance Heatmap.jpg",
+    "description": "Heatmap of Chocolate's activity throughout the day",
+    "date": "2025-09-07"
   }
+
 ]

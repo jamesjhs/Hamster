@@ -941,33 +941,3 @@ function setHeatmapMetric(metric) {
 
 window.setHeatmapMetric = setHeatmapMetric;
 
-
-// ─── Initialise ───────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  // Populate the file selector with available daily CSV files.
-  // longtermlog.csv is already represented by the default option.
-  try {
-    const files = await fetch('/api/csv-files').then((r) => r.json());
-    const sel   = document.getElementById('fileSelect');
-    files.forEach((f) => {
-      if (f === 'longtermlog.csv') return; // already covered by default option
-      const opt      = document.createElement('option');
-      opt.value      = f;
-      opt.textContent = fmtFilename(f);
-      sel.appendChild(opt);
-    });
-  } catch (e) {
-    console.warn('Could not load CSV file list:', e);
-  }
-
-  // Auto-load data when a specific file is selected.
-  document.getElementById('fileSelect').addEventListener('change', () => {
-    const isSpecific = document.getElementById('fileSelect').value !== '';
-    document.getElementById('dateRangePicker').style.display = isSpecific ? 'none' : 'flex';
-    loadData();
-  });
-
-  // Default view: last 30 days on the long-term log. setPreset calls loadData().
-  setPreset(30);
-});
-

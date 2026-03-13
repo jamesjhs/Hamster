@@ -2,9 +2,13 @@
 /* global Chart */
 
 // ─── State ────────────────────────────────────────────────────────────────────
-let wheelChart  = null;
-let motionChart = null;
-let _heatmapMetric = 'distance';
+let wheelChart      = null;
+let motionChart     = null;
+let dowChart        = null;
+let wheelRatioChart = null;
+let floorRatioChart = null;
+let hourlyChart     = null;
+let _heatmapMetric  = 'distance';
 
 // ─── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -111,11 +115,16 @@ function clearStates() {
   document.getElementById('errorState').classList.add('hidden');
   document.getElementById('noDataState').classList.add('hidden');
   document.getElementById('summaryCards').classList.add('hidden');
+  document.getElementById('deepStatsPanel').classList.add('hidden');
   // Clear data table
   document.getElementById('dataTableBody').innerHTML = '';
   // Destroy existing charts so canvases are reused cleanly
-  if (wheelChart)  { wheelChart.destroy();  wheelChart  = null; }
-  if (motionChart) { motionChart.destroy(); motionChart = null; }
+  if (wheelChart)      { wheelChart.destroy();      wheelChart      = null; }
+  if (motionChart)     { motionChart.destroy();     motionChart     = null; }
+  if (dowChart)        { dowChart.destroy();        dowChart        = null; }
+  if (wheelRatioChart) { wheelRatioChart.destroy(); wheelRatioChart = null; }
+  if (floorRatioChart) { floorRatioChart.destroy(); floorRatioChart = null; }
+  if (hourlyChart)     { hourlyChart.destroy();     hourlyChart     = null; }
 }
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
@@ -124,31 +133,42 @@ async function loadData() {
   const fromDate = document.getElementById('fromDate').value;
   const toDate   = document.getElementById('toDate').value;
 
-  let url = '/api/csv-data';
+  let dataUrl  = '/api/csv-data';
+  let statsUrl = '/api/stats';
+
   if (file) {
-    url += `?file=${encodeURIComponent(file)}`;
+    dataUrl  += `?file=${encodeURIComponent(file)}`;
+    statsUrl += `?file=${encodeURIComponent(file)}`;
   } else {
     const params = new URLSearchParams();
     if (fromDate) params.set('from', fromDate);
     if (toDate)   params.set('to',   toDate);
-    url += '?' + params.toString();
+    const qs = params.toString();
+    dataUrl  += qs ? '?' + qs : '';
+    statsUrl += qs ? '?' + qs : '';
   }
 
   clearStates();
   showLoading(true);
 
   try {
-    const response = await fetch(url);
+    // Fetch CSV data and statistics in parallel
+    const [dataResp, statsResp] = await Promise.all([
+      fetch(dataUrl),
+      fetch(statsUrl).catch(() => null),
+    ]);
 
-    if (!response.ok) {
+    if (!dataResp.ok) {
       showLoading(false);
-      let msg = `Server error ${response.status}`;
-      try { msg = (await response.json()).error || msg; } catch { /* ignore */ }
+      let msg = `Server error ${dataResp.status}`;
+      try { msg = (await dataResp.json()).error || msg; } catch { /* ignore */ }
       showError(msg);
       return;
     }
 
-    const data = await response.json();
+    const data  = await dataResp.json();
+    const stats = statsResp && statsResp.ok ? await statsResp.json() : null;
+
     showLoading(false);
 
     if (!data.rows || data.rows.length === 0) {
@@ -156,9 +176,10 @@ async function loadData() {
       return;
     }
 
-    renderCharts(data);
+    renderCharts(data, stats);
     renderSummary(data);
     renderTable(data);
+    if (stats && stats.n > 0) renderStats(stats);
     loadHeatmap();
   } catch (e) {
     showLoading(false);
@@ -170,7 +191,7 @@ async function loadData() {
 window.loadData = loadData;
 
 // ─── Chart rendering ──────────────────────────────────────────────────────────
-function renderCharts({ rows, type }) {
+function renderCharts({ rows, type }, stats) {
   if (!rows || rows.length === 0) return;
 
   const isLongterm = type === 'longterm';
@@ -206,6 +227,39 @@ function renderCharts({ rows, type }) {
     scales: { y: { beginAtZero: true } },
   };
 
+  // Rolling average overlays (longterm only, from stats)
+  const rollingDatasets = [];
+  if (isLongterm && stats && stats.rolling) {
+    const roll7  = stats.rolling.dist7  || [];
+    const roll30 = stats.rolling.dist30 || [];
+    if (roll7.length === rows.length) {
+      rollingDatasets.push({
+        label: '7-day rolling avg',
+        data: roll7,
+        borderColor: '#7c3aed',
+        borderWidth: 2,
+        borderDash: [5, 3],
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        order: 0,
+      });
+    }
+    if (roll30.length === rows.length && rows.length >= 30) {
+      rollingDatasets.push({
+        label: '30-day rolling avg',
+        data: roll30,
+        borderColor: '#0891b2',
+        borderWidth: 2,
+        borderDash: [8, 4],
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        order: 0,
+      });
+    }
+  }
+
   // Wheel distance chart
   wheelChart = new Chart(document.getElementById('wheelChart'), {
     type: 'line',
@@ -222,6 +276,7 @@ function renderCharts({ rows, type }) {
           borderColor: '#923717', backgroundColor: 'rgba(146,55,23,0.12)',
           fill: true, tension: 0.3,
         },
+        ...rollingDatasets,
       ],
     },
     options: {
@@ -288,6 +343,361 @@ function renderSummary({ rows, type }) {
   document.getElementById('sumTotalMotion').textContent = (m1 + m2 + m3).toFixed(1) + ' s';
 
   document.getElementById('summaryCards').classList.remove('hidden');
+}
+
+// ─── Deep Statistics Panel ────────────────────────────────────────────────────
+
+/** Render a named value into an element by id. */
+function _setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+/**
+ * Render the full deep statistics panel from the /api/stats response.
+ * Handles both 'longterm' and 'intraday' stat shapes.
+ */
+function renderStats(stats) {
+  if (!stats || stats.n === 0) return;
+
+  const panel = document.getElementById('deepStatsPanel');
+  panel.classList.remove('hidden');
+
+  if (stats.type === 'longterm') {
+    _renderLongtermStats(stats);
+  } else {
+    _renderIntradayStats(stats);
+  }
+}
+
+function _renderLongtermStats(stats) {
+  const ds = stats.distanceStats || {};
+  const tr = stats.trend         || {};
+  const rl = stats.rolling       || {};
+
+  // Row 1: Descriptive
+  _setText('statMedian', ds.median != null ? ds.median.toFixed(1) + ' m' : '—');
+  _setText('statMean',   ds.mean   != null ? ds.mean.toFixed(1)   + ' m' : '—');
+  _setText('statCV',     ds.cv     != null ? (ds.cv * 100).toFixed(1) + '%' : '—');
+  _setText('statStd',    ds.std    != null ? ds.std.toFixed(1)    + ' m' : '—');
+
+  // Trend: slope in m/day with direction emoji
+  if (tr.distSlope != null) {
+    const slope = tr.distSlope;
+    const arrow = slope > 0.5 ? '↑' : slope < -0.5 ? '↓' : '→';
+    _setText('statTrend', `${arrow} ${Math.abs(slope).toFixed(2)} m/d`);
+    _setText('statR2',    tr.distR2 != null ? tr.distR2.toFixed(3) : '—');
+  }
+
+  // Rolling averages (latest value)
+  const roll7  = rl.dist7  || [];
+  const roll30 = rl.dist30 || [];
+  _setText('statRoll7',  roll7.length  ? roll7[roll7.length - 1].toFixed(1)   + ' m' : '—');
+  _setText('statRoll30', roll30.length ? roll30[roll30.length - 1].toFixed(1) + ' m' : '—');
+
+  // Row 2: Records & streaks
+  if (stats.bestDay) {
+    _setText('statBestDay',  stats.bestDay.date);
+    _setText('statBestDist', stats.bestDay.dist.toFixed(1) + ' m');
+  }
+  if (stats.worstDay) {
+    _setText('statWorstDay',  stats.worstDay.date);
+    _setText('statWorstDist', stats.worstDay.dist.toFixed(1) + ' m');
+  }
+  _setText('statMaxStreak',  stats.maxStreak     != null ? stats.maxStreak + 'd'  : '—');
+  _setText('statActiveDays', stats.activeDays    != null ? `${stats.activeDays} / ${stats.n}` : '—');
+  _setText('statCurStreak',  stats.currentStreak != null ? stats.currentStreak    : '—');
+
+  // Row 3a: Day-of-week bar chart
+  if (stats.dowLabels && stats.dowAvgDist) {
+    dowChart = new Chart(document.getElementById('dowChart'), {
+      type: 'bar',
+      data: {
+        labels: stats.dowLabels,
+        datasets: [{
+          label: 'Avg distance (m)',
+          data: stats.dowAvgDist,
+          backgroundColor: stats.dowAvgDist.map((_, i) =>
+            i >= 5 ? 'rgba(217,96,14,0.85)' : 'rgba(217,96,14,0.55)'
+          ),
+          borderColor: '#923717',
+          borderWidth: 1,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'm' } } },
+      },
+    });
+  }
+
+  // Row 3b: Wheel preference doughnut
+  if (stats.wheelRatio) {
+    const wr = stats.wheelRatio;
+    wheelRatioChart = new Chart(document.getElementById('wheelRatioChart'), {
+      type: 'doughnut',
+      data: {
+        labels: [
+          `Wheel 1 (bottom) ${wr.wheel1Pct}%`,
+          `Wheel 2 (top) ${wr.wheel2Pct}%`,
+        ],
+        datasets: [{
+          data: [wr.wheel1, wr.wheel2],
+          backgroundColor: ['rgba(217,96,14,0.8)', 'rgba(146,55,23,0.8)'],
+          borderColor:     ['#d9600e',              '#923717'],
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // Row 3c: Floor distribution doughnut
+  if (stats.floorRatio) {
+    const fr = stats.floorRatio;
+    floorRatioChart = new Chart(document.getElementById('floorRatioChart'), {
+      type: 'doughnut',
+      data: {
+        labels: [
+          `Ground ${fr.groundPct}%`,
+          `Middle ${fr.middlePct}%`,
+          `Top ${fr.topPct}%`,
+        ],
+        datasets: [{
+          data: [fr.ground, fr.middle, fr.top],
+          backgroundColor: [
+            'rgba(239,68,68,0.8)',
+            'rgba(34,197,94,0.8)',
+            'rgba(59,130,246,0.8)',
+          ],
+          borderColor: ['#ef4444', '#22c55e', '#3b82f6'],
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // Row 4: Percentile IQR display
+  if (ds.min != null) {
+    _setText('statMin', ds.min.toFixed(1) + ' m');
+    _setText('statP25', ds.p25.toFixed(1) + ' m');
+    _setText('statP50', ds.median.toFixed(1) + ' m');
+    _setText('statP75', ds.p75.toFixed(1) + ' m');
+    _setText('statP95', ds.p95.toFixed(1) + ' m');
+    _setText('statMax', ds.max.toFixed(1) + ' m');
+    _drawBoxPlot(ds);
+  }
+
+  // Row 5: Milestones
+  _renderMilestones(stats);
+
+  // Hide intraday hourly panel
+  const hp = document.getElementById('hourlyPanel');
+  if (hp) hp.classList.add('hidden');
+}
+
+function _renderIntradayStats(stats) {
+  // For intraday data, show the hourly chart only
+  const hp = document.getElementById('hourlyPanel');
+  if (!hp) return;
+  hp.classList.remove('hidden');
+
+  const hours  = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+  const hourly = stats.hourlyDist || new Array(24).fill(0);
+
+  hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels: hours,
+      datasets: [{
+        label: 'Wheel distance (m)',
+        data: hourly,
+        backgroundColor: 'rgba(217,96,14,0.7)',
+        borderColor: '#923717',
+        borderWidth: 1,
+        borderRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, title: { display: true, text: 'm' } } },
+    },
+  });
+
+  // Also show simple stat cards with what we have
+  const ds = stats.distanceStats || {};
+  if (ds.mean != null) {
+    _setText('statMedian', ds.median.toFixed(3) + ' m');
+    _setText('statMean',   ds.mean.toFixed(3)   + ' m');
+    _setText('statCV',     (ds.cv * 100).toFixed(1) + '%');
+    _setText('statStd',    ds.std.toFixed(3)    + ' m');
+    // Show peak hour info in trend card
+    if (stats.peakDistHour != null) {
+      _setText('statTrend', `${String(stats.peakDistHour).padStart(2,'0')}:00`);
+      _setText('statR2', 'peak hour');
+    }
+  }
+}
+
+/**
+ * Draw a horizontal box-and-whisker plot on the #boxPlotCanvas element.
+ * Shows: min, P25, median, P75, P95, max.
+ */
+function _drawBoxPlot(ds) {
+  const canvas = document.getElementById('boxPlotCanvas');
+  if (!canvas) return;
+  const ctx  = canvas.getContext('2d');
+  const W    = canvas.parentElement.clientWidth || 600;
+  const H    = 52;
+  canvas.width  = W;
+  canvas.height = H;
+  ctx.clearRect(0, 0, W, H);
+
+  const PAD  = 40;   // left/right padding for labels
+  const span = ds.max - ds.min;
+  if (span <= 0) return;
+
+  function xOf(v) {
+    return PAD + ((v - ds.min) / span) * (W - PAD * 2);
+  }
+
+  const MID_Y  = H * 0.5;
+  const BOX_H  = H * 0.42;
+
+  // Whisker line: min → max
+  ctx.strokeStyle = '#923717';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(xOf(ds.min), MID_Y);
+  ctx.lineTo(xOf(ds.max), MID_Y);
+  ctx.stroke();
+
+  // IQR box: P25 → P75
+  ctx.fillStyle   = 'rgba(217,96,14,0.25)';
+  ctx.strokeStyle = '#d9600e';
+  ctx.lineWidth   = 1.5;
+  const bx = xOf(ds.p25);
+  const bw = xOf(ds.p75) - bx;
+  ctx.fillRect(bx, MID_Y - BOX_H / 2, bw, BOX_H);
+  ctx.strokeRect(bx, MID_Y - BOX_H / 2, bw, BOX_H);
+
+  // Median line
+  ctx.strokeStyle = '#923717';
+  ctx.lineWidth   = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(xOf(ds.median), MID_Y - BOX_H / 2);
+  ctx.lineTo(xOf(ds.median), MID_Y + BOX_H / 2);
+  ctx.stroke();
+
+  // P95 marker (diamond)
+  ctx.fillStyle = '#7c3aed';
+  const px = xOf(ds.p95);
+  const ps = 5;
+  ctx.beginPath();
+  ctx.moveTo(px,      MID_Y - ps);
+  ctx.lineTo(px + ps, MID_Y);
+  ctx.lineTo(px,      MID_Y + ps);
+  ctx.lineTo(px - ps, MID_Y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Tick marks: min / max
+  [ds.min, ds.max].forEach((v) => {
+    ctx.strokeStyle = '#923717';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(xOf(v), MID_Y - BOX_H / 2);
+    ctx.lineTo(xOf(v), MID_Y + BOX_H / 2);
+    ctx.stroke();
+  });
+
+  // Labels beneath
+  ctx.fillStyle  = '#78350f';
+  ctx.font       = '9px sans-serif';
+  ctx.textAlign  = 'center';
+  ctx.textBaseline = 'top';
+  const labelY = MID_Y + BOX_H / 2 + 3;
+  [
+    [ds.min,    'min'],
+    [ds.p25,    'P25'],
+    [ds.median, 'P50'],
+    [ds.p75,    'P75'],
+    [ds.p95,    'P95'],
+    [ds.max,    'max'],
+  ].forEach(([v, lbl]) => {
+    ctx.fillText(lbl, xOf(v), labelY);
+  });
+}
+
+/**
+ * Render milestone progress bars using the all-time total from the
+ * longtermlog stats (bestDay dist gives upper bound for context).
+ */
+function _renderMilestones(stats) {
+  const container = document.getElementById('milestones');
+  if (!container) return;
+
+  // Fetch the all-time total from longtermlog to show true cumulative distance
+  fetch('/api/csv-data')
+    .then((r) => r.json())
+    .then((d) => {
+      let totalM = 0;
+      if (d.rows && d.rows.length) {
+        // Each row of longtermlog IS a daily total: sum col1+col2
+        d.rows.forEach((r) => { totalM += (r[1] || 0) + (r[2] || 0); });
+      }
+
+      const milestones = [
+        { label: 'Park Run (5 km)',       dist: 5_000 },
+        { label: '10k Race',              dist: 10_000 },
+        { label: 'Half Marathon',         dist: 21_097 },
+        { label: 'Full Marathon',         dist: 42_195 },
+        { label: 'Channel Tunnel (50 km)', dist: 50_450 },
+        { label: '100 km Ultra',          dist: 100_000 },
+        { label: 'London to Birmingham',  dist: 162_000 },
+        { label: 'UK End-to-End (1407 km)', dist: 1_407_000 },
+      ];
+
+      container.innerHTML = '';
+      milestones.forEach(({ label, dist }) => {
+        const pct     = Math.min(100, (totalM / dist) * 100);
+        const reached = totalM >= dist;
+        const kmLabel = totalM >= 1000
+          ? `${(totalM / 1000).toFixed(2)} km`
+          : `${totalM.toFixed(0)} m`;
+
+        const row = document.createElement('div');
+        row.innerHTML = `
+          <div class="flex justify-between mb-0.5">
+            <span class="text-hamster-700 font-semibold">${reached ? '✅ ' : ''}${label}</span>
+            <span class="text-hamster-500">${kmLabel} / ${(dist / 1000).toFixed(1)} km &nbsp; ${pct.toFixed(1)}%</span>
+          </div>
+          <div class="w-full bg-hamster-100 rounded-full h-2">
+            <div class="bg-hamster-600 h-2 rounded-full transition-all" style="width:${pct}%"></div>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    })
+    .catch(() => {
+      container.innerHTML = '<p class="text-hamster-400 italic">Could not load all-time total.</p>';
+    });
 }
 
 // ─── Data table ───────────────────────────────────────────────────────────────
@@ -530,3 +940,4 @@ function setHeatmapMetric(metric) {
 }
 
 window.setHeatmapMetric = setHeatmapMetric;
+

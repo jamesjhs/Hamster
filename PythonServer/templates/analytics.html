@@ -90,6 +90,102 @@
     </div>
   </div>
 
+  <!-- Deep Statistics Panel (longterm data) -->
+  <div id="deepStatsPanel" class="hidden mb-6">
+    <h2 class="text-lg font-bold text-hamster-800 mb-4">🔬 Deep Statistics</h2>
+
+    <!-- Row 1: Descriptive stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Median Daily Dist</p>
+        <p class="text-2xl font-bold text-hamster-800" id="statMedian">—</p>
+        <p class="text-xs text-hamster-400 mt-1">mean: <span id="statMean">—</span></p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Variability (CV)</p>
+        <p class="text-2xl font-bold text-hamster-800" id="statCV">—</p>
+        <p class="text-xs text-hamster-400 mt-1">σ = <span id="statStd">—</span></p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Distance Trend</p>
+        <p class="text-2xl font-bold text-hamster-800" id="statTrend">—</p>
+        <p class="text-xs text-hamster-400 mt-1">R² = <span id="statR2">—</span></p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Rolling Avg (7d)</p>
+        <p class="text-2xl font-bold text-hamster-800" id="statRoll7">—</p>
+        <p class="text-xs text-hamster-400 mt-1">30d: <span id="statRoll30">—</span></p>
+      </div>
+    </div>
+
+    <!-- Row 2: Records & streaks -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Best Day 🏆</p>
+        <p class="text-lg font-bold text-hamster-800" id="statBestDay">—</p>
+        <p class="text-xs text-hamster-400 mt-1"><span id="statBestDist">—</span></p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Worst Day 😴</p>
+        <p class="text-lg font-bold text-hamster-800" id="statWorstDay">—</p>
+        <p class="text-xs text-hamster-400 mt-1"><span id="statWorstDist">—</span></p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Longest Streak 🔥</p>
+        <p class="text-2xl font-bold text-hamster-800" id="statMaxStreak">—</p>
+        <p class="text-xs text-hamster-400 mt-1">consecutive active days</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
+        <p class="text-xs text-hamster-500 uppercase font-semibold">Active Days</p>
+        <p class="text-2xl font-bold text-hamster-800" id="statActiveDays">—</p>
+        <p class="text-xs text-hamster-400 mt-1">current streak: <span id="statCurStreak">—</span>d</p>
+      </div>
+    </div>
+
+    <!-- Row 3: Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Avg Distance by Day of Week</h3>
+        <canvas id="dowChart"></canvas>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Wheel Preference</h3>
+        <canvas id="wheelRatioChart"></canvas>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Floor Time Distribution</h3>
+        <canvas id="floorRatioChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Row 4: Percentile distribution -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-4">
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Daily Distance Distribution</h3>
+      <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-hamster-500 mb-3">
+        <span>Min: <strong id="statMin" class="text-hamster-800">—</strong></span>
+        <span>P25: <strong id="statP25" class="text-hamster-800">—</strong></span>
+        <span>Median: <strong id="statP50" class="text-hamster-800">—</strong></span>
+        <span>P75: <strong id="statP75" class="text-hamster-800">—</strong></span>
+        <span>P95: <strong id="statP95" class="text-hamster-800">—</strong></span>
+        <span>Max: <strong id="statMax" class="text-hamster-800">—</strong></span>
+      </div>
+      <canvas id="boxPlotCanvas" height="52" style="max-width:100%;display:block"></canvas>
+    </div>
+
+    <!-- Row 5: Milestone progress -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-4">
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">🏅 Distance Milestones (all-time)</h3>
+      <div id="milestones" class="space-y-3 text-xs"></div>
+    </div>
+
+    <!-- Row 6: Intraday hourly chart (shown for intraday data) -->
+    <div id="hourlyPanel" class="hidden bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-4">
+      <h3 class="font-bold text-hamster-700 mb-1 text-sm uppercase tracking-wide">Activity by Hour of Day</h3>
+      <p class="text-xs text-hamster-400 mb-3">Total wheel distance accumulated per clock hour during this session.</p>
+      <canvas id="hourlyChart"></canvas>
+    </div>
+  </div>
+
   <!-- Charts -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
@@ -158,5 +254,5 @@
   </div>
 
   <script src="/static/js/chart.umd.min.js"></script>
-  <script src="/static/js/analytics.js"></script>
+  <script src="/static/js/analytics.js?v=4"></script>
 {% endblock %}

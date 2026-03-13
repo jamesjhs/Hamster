@@ -414,6 +414,246 @@ def api_csv_data():
     return jsonify({'type': 'longterm', 'rows': rows})
 
 
+@app.route('/api/stats')
+def api_stats():
+    """Compute descriptive and trend statistics for the requested date range.
+
+    Query parameters:
+      from – start date YYYY-MM-DD (longterm range; ignored when ``file`` is set)
+      to   – end   date YYYY-MM-DD (longterm range; ignored when ``file`` is set)
+      file – specific daily CSV filename (triggers intraday statistics instead)
+
+    **Longterm response** (one row = one day):
+      type, n, activeDays, distanceStats, motionStats, trend, rolling,
+      bestDay, worstDay, maxStreak, currentStreak, dowLabels, dowAvgDist,
+      wheelRatio, floorRatio
+
+    **Intraday response** (one row = one 30-second poll):
+      type, n, distanceStats, motionStats, peakDistHour, peakMotionHour,
+      hourlyDist, hourlyMotion
+    """
+    file_param    = request.args.get('file')
+    from_date_str = request.args.get('from')
+    to_date_str   = request.args.get('to')
+
+    if file_param and not re.match(r'^[\w-]+\.csv$', file_param):
+        return jsonify({'error': 'Invalid file name'}), 400
+
+    # ── Helper: descriptive statistics ────────────────────────────────────────
+    def _stats(values):
+        if not values:
+            return {}
+        n_v  = len(values)
+        s    = sorted(values)
+        mean = sum(values) / n_v
+        var  = sum((v - mean) ** 2 for v in values) / n_v if n_v > 1 else 0.0
+        std  = var ** 0.5
+
+        def pct(p):
+            idx = p / 100 * (n_v - 1)
+            lo  = int(idx)
+            hi  = min(lo + 1, n_v - 1)
+            return s[lo] + (idx - lo) * (s[hi] - s[lo])
+
+        return {
+            'mean':   round(mean, 3),
+            'median': round(pct(50), 3),
+            'std':    round(std, 3),
+            'cv':     round(std / mean if mean > 0 else 0, 4),
+            'min':    round(s[0], 3),
+            'max':    round(s[-1], 3),
+            'p25':    round(pct(25), 3),
+            'p75':    round(pct(75), 3),
+            'p95':    round(pct(95), 3),
+        }
+
+    # ── Helper: ordinary least-squares linear regression ──────────────────────
+    def _linreg(ys):
+        n_v = len(ys)
+        if n_v < 2:
+            return 0.0, (ys[0] if ys else 0.0), 0.0
+        xm    = (n_v - 1) / 2.0
+        ym    = sum(ys) / n_v
+        num   = sum((i - xm) * (ys[i] - ym) for i in range(n_v))
+        den_x = sum((i - xm) ** 2 for i in range(n_v))
+        den_y = sum((v - ym)  ** 2 for v in ys)
+        if den_x == 0:
+            return 0.0, ym, 0.0
+        slope = num / den_x
+        r_sq  = (num ** 2) / (den_x * den_y) if den_y > 0 else 0.0
+        return round(slope, 4), round(ym - slope * xm, 4), round(r_sq, 4)
+
+    # ── Helper: rolling average series ────────────────────────────────────────
+    def _rolling(values, window):
+        out = []
+        for i, _ in enumerate(values):
+            chunk = values[max(0, i - window + 1): i + 1]
+            out.append(round(sum(chunk) / len(chunk), 3))
+        return out
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Intraday statistics (single daily CSV file)
+    # ══════════════════════════════════════════════════════════════════════════
+    if file_param and file_param != 'longtermlog.csv':
+        rows = read_csv(CSV_DIR / file_param)
+        if not rows:
+            return jsonify({'type': 'intraday', 'n': 0}), 200
+
+        deltas_dist   = []
+        deltas_motion = []
+        hourly_dist   = [0.0] * 24
+        hourly_motion = [0.0] * 24
+
+        for i in range(1, len(rows)):
+            prev, curr = rows[i - 1], rows[i]
+            d = (max(0.0, (curr[1] or 0) - (prev[1] or 0))
+                 + max(0.0, (curr[2] or 0) - (prev[2] or 0)))
+            m = (max(0.0, (curr[3] or 0) - (prev[3] or 0))
+                 + max(0.0, (curr[4] or 0) - (prev[4] or 0))
+                 + max(0.0, (curr[5] or 0) - (prev[5] or 0)))
+            deltas_dist.append(d)
+            deltas_motion.append(m)
+            hour = datetime.fromtimestamp(curr[0]).hour
+            hourly_dist[hour]   += d
+            hourly_motion[hour] += m
+
+        peak_dist_h   = hourly_dist.index(max(hourly_dist))
+        peak_motion_h = hourly_motion.index(max(hourly_motion))
+
+        return jsonify({
+            'type':           'intraday',
+            'n':              len(deltas_dist),
+            'distanceStats':  _stats(deltas_dist),
+            'motionStats':    _stats(deltas_motion),
+            'peakDistHour':   peak_dist_h,
+            'peakMotionHour': peak_motion_h,
+            'hourlyDist':     [round(v, 3) for v in hourly_dist],
+            'hourlyMotion':   [round(v, 3) for v in hourly_motion],
+        })
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Long-term statistics (longtermlog.csv, one row per day)
+    # ══════════════════════════════════════════════════════════════════════════
+    rows = read_csv(CSV_DIR / 'longtermlog.csv')
+
+    if from_date_str or to_date_str:
+        try:
+            from_ts = (
+                datetime.strptime(from_date_str, '%Y-%m-%d').timestamp()
+                if from_date_str else 0
+            )
+            to_ts = (
+                datetime.strptime(to_date_str, '%Y-%m-%d').timestamp() + 86400
+                if to_date_str else float('inf')
+            )
+        except ValueError:
+            return jsonify({'error': 'Invalid date format – use YYYY-MM-DD'}), 400
+        rows = [r for r in rows if from_ts <= r[0] <= to_ts]
+
+    if not rows:
+        return jsonify({'type': 'longterm', 'n': 0}), 200
+
+    n           = len(rows)
+    timestamps  = [r[0]                    for r in rows]
+    w1          = [r[1] if len(r) > 1 else 0.0 for r in rows]
+    w2          = [r[2] if len(r) > 2 else 0.0 for r in rows]
+    m1          = [r[3] if len(r) > 3 else 0.0 for r in rows]
+    m2          = [r[4] if len(r) > 4 else 0.0 for r in rows]
+    m3          = [r[5] if len(r) > 5 else 0.0 for r in rows]
+    total_dist  = [w1[i] + w2[i]          for i in range(n)]
+    total_mot   = [m1[i] + m2[i] + m3[i] for i in range(n)]
+
+    slope_d, _, r2_d = _linreg(total_dist)
+    slope_m, _, r2_m = _linreg(total_mot)
+
+    roll7  = _rolling(total_dist, 7)
+    roll30 = _rolling(total_dist, 30)
+
+    max_idx = max(range(n), key=lambda i: total_dist[i])
+    active  = [(total_dist[i], i) for i in range(n) if total_dist[i] > 0]
+    min_idx = min(active, key=lambda x: x[0])[1] if active else 0
+
+    # Streaks
+    max_streak = cur = 0
+    for v in total_dist:
+        if v > 0:
+            cur += 1
+            max_streak = max(max_streak, cur)
+        else:
+            cur = 0
+    current_streak = 0
+    for v in reversed(total_dist):
+        if v > 0:
+            current_streak += 1
+        else:
+            break
+
+    # Day-of-week averages (0 = Monday … 6 = Sunday)
+    dow_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    dow_sum    = [0.0] * 7
+    dow_cnt    = [0]   * 7
+    for i, ts in enumerate(timestamps):
+        d = datetime.fromtimestamp(ts).weekday()
+        dow_sum[d] += total_dist[i]
+        dow_cnt[d] += 1
+    dow_avg = [
+        round(dow_sum[d] / dow_cnt[d], 3) if dow_cnt[d] else 0.0
+        for d in range(7)
+    ]
+
+    # Wheel & floor ratios
+    tw1 = sum(w1); tw2 = sum(w2); tw = tw1 + tw2
+    tm1 = sum(m1); tm2 = sum(m2); tm3 = sum(m3); tm = tm1 + tm2 + tm3
+
+    return jsonify({
+        'type':        'longterm',
+        'n':           n,
+        'activeDays':  sum(1 for v in total_dist if v > 0),
+        'distanceStats': _stats(total_dist),
+        'motionStats':   _stats(total_mot),
+        'trend': {
+            'distSlope':   slope_d,
+            'distR2':      r2_d,
+            'motionSlope': slope_m,
+            'motionR2':    r2_m,
+        },
+        'rolling': {
+            'labels': [
+                datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+                for ts in timestamps
+            ],
+            'dist7':  roll7,
+            'dist30': roll30,
+        },
+        'bestDay': {
+            'date': datetime.fromtimestamp(timestamps[max_idx]).strftime('%Y-%m-%d'),
+            'dist': round(total_dist[max_idx], 2),
+        },
+        'worstDay': {
+            'date': datetime.fromtimestamp(timestamps[min_idx]).strftime('%Y-%m-%d'),
+            'dist': round(total_dist[min_idx], 2),
+        },
+        'maxStreak':     max_streak,
+        'currentStreak': current_streak,
+        'dowLabels':     dow_labels,
+        'dowAvgDist':    dow_avg,
+        'wheelRatio': {
+            'wheel1':    round(tw1, 2),
+            'wheel2':    round(tw2, 2),
+            'wheel1Pct': round(tw1 / tw * 100, 1) if tw > 0 else 50.0,
+            'wheel2Pct': round(tw2 / tw * 100, 1) if tw > 0 else 50.0,
+        },
+        'floorRatio': {
+            'ground':    round(tm1, 2),
+            'middle':    round(tm2, 2),
+            'top':       round(tm3, 2),
+            'groundPct': round(tm1 / tm * 100, 1) if tm > 0 else 33.3,
+            'middlePct': round(tm2 / tm * 100, 1) if tm > 0 else 33.3,
+            'topPct':    round(tm3 / tm * 100, 1) if tm > 0 else 33.3,
+        },
+    })
+
+
 @app.route('/api/heatmap')
 def api_heatmap():
     """Return heatmap data: activity/distance per 30-minute slot per day.
@@ -510,7 +750,8 @@ def api_heatmap():
     })
 
 
-
+@app.route('/api/images')
+def api_images():
     return jsonify(load_images())
 
 

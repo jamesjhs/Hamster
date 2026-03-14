@@ -85,19 +85,22 @@
       <p class="text-2xl font-bold text-hamster-800" id="sumWheel2">—</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
-      <p class="text-xs text-hamster-500 uppercase font-semibold">Total Active Time</p>
+      <p class="text-xs text-hamster-500 uppercase font-semibold">Sensor Active Time</p>
       <p class="text-2xl font-bold text-hamster-800" id="sumTotalMotion">—</p>
+      <p class="text-xs text-hamster-400 mt-1 hidden" id="sumWheelTimeRow">
+        wheel: <span id="sumWheelTime">—</span>
+      </p>
     </div>
   </div>
 
-  <!-- Deep Statistics Panel (longterm data) -->
+  <!-- Deep Statistics Panel (longterm and intraday data) -->
   <div id="deepStatsPanel" class="hidden mb-6">
     <h2 class="text-lg font-bold text-hamster-800 mb-4">🔬 Deep Statistics</h2>
 
     <!-- Row 1: Descriptive stats -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
       <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
-        <p class="text-xs text-hamster-500 uppercase font-semibold">Median Daily Dist</p>
+        <p class="text-xs text-hamster-500 uppercase font-semibold" id="statMedianLabel">Median Daily Dist</p>
         <p class="text-2xl font-bold text-hamster-800" id="statMedian">—</p>
         <p class="text-xs text-hamster-400 mt-1">mean: <span id="statMean">—</span></p>
       </div>
@@ -107,19 +110,19 @@
         <p class="text-xs text-hamster-400 mt-1">σ = <span id="statStd">—</span></p>
       </div>
       <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
-        <p class="text-xs text-hamster-500 uppercase font-semibold">Distance Trend</p>
+        <p class="text-xs text-hamster-500 uppercase font-semibold" id="statTrendLabel">Distance Trend</p>
         <p class="text-2xl font-bold text-hamster-800" id="statTrend">—</p>
-        <p class="text-xs text-hamster-400 mt-1">R² = <span id="statR2">—</span></p>
+        <p class="text-xs text-hamster-400 mt-1" id="statR2Label">R² = <span id="statR2">—</span></p>
       </div>
       <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
-        <p class="text-xs text-hamster-500 uppercase font-semibold">Rolling Avg (7d)</p>
+        <p class="text-xs text-hamster-500 uppercase font-semibold" id="statRoll7Label">Rolling Avg (7d)</p>
         <p class="text-2xl font-bold text-hamster-800" id="statRoll7">—</p>
-        <p class="text-xs text-hamster-400 mt-1">30d: <span id="statRoll30">—</span></p>
+        <p class="text-xs text-hamster-400 mt-1" id="statRoll30Label">30d: <span id="statRoll30">—</span></p>
       </div>
     </div>
 
-    <!-- Row 2: Records & streaks -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+    <!-- Row 2: Records & streaks (long-term only) -->
+    <div class="longterm-only grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
       <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
         <p class="text-xs text-hamster-500 uppercase font-semibold">Best Day 🏆</p>
         <p class="text-lg font-bold text-hamster-800" id="statBestDay">—</p>
@@ -144,7 +147,7 @@
 
     <!-- Row 3: Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
-      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <div class="longterm-only bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
         <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Avg Distance by Day of Week</h3>
         <canvas id="dowChart"></canvas>
       </div>
@@ -160,7 +163,7 @@
 
     <!-- Row 4: Percentile distribution -->
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-4">
-      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">Daily Distance Distribution</h3>
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide" id="distDistLabel">Daily Distance Distribution</h3>
       <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-hamster-500 mb-3">
         <span>Min: <strong id="statMin" class="text-hamster-800">—</strong></span>
         <span>P25: <strong id="statP25" class="text-hamster-800">—</strong></span>
@@ -184,7 +187,60 @@
       <p class="text-xs text-hamster-400 mb-3">Total wheel distance accumulated per clock hour during this session.</p>
       <canvas id="hourlyChart"></canvas>
     </div>
-  </div>
+
+    <!-- Row 7: Speed analytics (intraday only) -->
+    <div id="speedPanel" class="hidden bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-4">
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">⚡ Speed Analytics</h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Avg Running Speed</p>
+          <p class="text-xl font-bold text-hamster-800" id="speedMean">—</p>
+          <p class="text-xs text-hamster-400 mt-1">median: <span id="speedMedian">—</span></p>
+        </div>
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Peak Speed</p>
+          <p class="text-xl font-bold text-hamster-800" id="speedMax">—</p>
+          <p class="text-xs text-hamster-400 mt-1">min: <span id="speedMin">—</span></p>
+        </div>
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Speed Variability (CV)</p>
+          <p class="text-xl font-bold text-hamster-800" id="speedCV">—</p>
+          <p class="text-xs text-hamster-400 mt-1">σ = <span id="speedStd">—</span></p>
+        </div>
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Speed Trend</p>
+          <p class="text-xl font-bold text-hamster-800" id="speedTrend">—</p>
+          <p class="text-xs text-hamster-400 mt-1">R² = <span id="speedTrendR2">—</span></p>
+        </div>
+      </div>
+      <p class="text-xs text-hamster-400 mb-2">Speed over time during this session — only intervals when the wheel was moving are plotted.</p>
+      <canvas id="speedChart"></canvas>
+    </div>
+
+    <!-- Row 8: Intraday activity time breakdown (intraday only) -->
+    <div id="activityBreakdownPanel" class="hidden bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-4">
+      <h3 class="font-bold text-hamster-700 mb-3 text-sm uppercase tracking-wide">🕐 Activity Time Summary</h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Time on Wheel</p>
+          <p class="text-xl font-bold text-hamster-800" id="actWheelTime">—</p>
+          <p class="text-xs text-hamster-400 mt-1">running intervals</p>
+        </div>
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Ground Sensor</p>
+          <p class="text-xl font-bold text-hamster-800" id="actGround">—</p>
+        </div>
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Middle Sensor</p>
+          <p class="text-xl font-bold text-hamster-800" id="actMiddle">—</p>
+        </div>
+        <div class="bg-hamster-50 rounded-lg p-3 text-center">
+          <p class="text-xs text-hamster-500 uppercase font-semibold">Top Sensor</p>
+          <p class="text-xl font-bold text-hamster-800" id="actTop">—</p>
+        </div>
+      </div>
+    </div>
+  </div><!-- end deepStatsPanel -->
 
   <!-- Charts -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -254,5 +310,5 @@
   </div>
 
   <script src="/static/js/chart.umd.min.js"></script>
-  <script src="/static/js/analytics.js?v=4"></script>
+  <script src="/static/js/analytics.js?v=5"></script>
 {% endblock %}

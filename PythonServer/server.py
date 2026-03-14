@@ -503,9 +503,13 @@ def api_stats():
         deltas_motion = []
         hourly_dist   = [0.0] * 24
         hourly_motion = [0.0] * 24
+        speeds_kmh        = []   # speed (km/h) for each interval where dist > 0
+        speed_timestamps  = []   # unix timestamps for those intervals
+        time_on_wheel     = 0.0  # total seconds the hamster spent running
 
         for i in range(1, len(rows)):
             prev, curr = rows[i - 1], rows[i]
+            delta_t = curr[0] - prev[0]
             d = (max(0.0, (curr[1] or 0) - (prev[1] or 0))
                  + max(0.0, (curr[2] or 0) - (prev[2] or 0)))
             m = (max(0.0, (curr[3] or 0) - (prev[3] or 0))
@@ -516,9 +520,32 @@ def api_stats():
             hour = datetime.fromtimestamp(curr[0]).hour
             hourly_dist[hour]   += d
             hourly_motion[hour] += m
+            # Only compute speed for genuine polling intervals (≥ 2 s).
+            # Near-duplicate row pairs (delta_t < 2 s) are a logging artefact
+            # and would produce unrealistically high speed readings.
+            if d > 0 and delta_t >= 2.0:
+                speeds_kmh.append(round(d / delta_t * 3.6, 4))
+                speed_timestamps.append(int(curr[0]))
+                time_on_wheel += delta_t
 
         peak_dist_h   = hourly_dist.index(max(hourly_dist))
         peak_motion_h = hourly_motion.index(max(hourly_motion))
+
+        # Speed trend within this session (linear regression on ordered speeds)
+        speed_slope, _, speed_r2 = (
+            _linreg(speeds_kmh) if len(speeds_kmh) >= 2 else (0.0, 0.0, 0.0)
+        )
+
+        # Wheel and floor ratios for the day
+        first_row = rows[0]
+        last_row  = rows[-1]
+        iw1 = max(0.0, (last_row[1] if len(last_row) > 1 else 0) - (first_row[1] if len(first_row) > 1 else 0))
+        iw2 = max(0.0, (last_row[2] if len(last_row) > 2 else 0) - (first_row[2] if len(first_row) > 2 else 0))
+        im1 = max(0.0, (last_row[3] if len(last_row) > 3 else 0) - (first_row[3] if len(first_row) > 3 else 0))
+        im2 = max(0.0, (last_row[4] if len(last_row) > 4 else 0) - (first_row[4] if len(first_row) > 4 else 0))
+        im3 = max(0.0, (last_row[5] if len(last_row) > 5 else 0) - (first_row[5] if len(first_row) > 5 else 0))
+        itw = iw1 + iw2
+        itm = im1 + im2 + im3
 
         return jsonify({
             'type':           'intraday',
@@ -529,6 +556,27 @@ def api_stats():
             'peakMotionHour': peak_motion_h,
             'hourlyDist':     [round(v, 3) for v in hourly_dist],
             'hourlyMotion':   [round(v, 3) for v in hourly_motion],
+            # Speed analytics
+            'speedStats':      _stats(speeds_kmh) if speeds_kmh else {},
+            'speedTrend':      {'slope': speed_slope, 'r2': speed_r2},
+            'speedTimestamps': speed_timestamps,
+            'speedValues':     speeds_kmh,
+            'timeOnWheel':     round(time_on_wheel, 1),
+            # Wheel & floor ratios (same structure as longterm)
+            'wheelRatio': {
+                'wheel1':    round(iw1, 2),
+                'wheel2':    round(iw2, 2),
+                'wheel1Pct': round(iw1 / itw * 100, 1) if itw > 0 else 50.0,
+                'wheel2Pct': round(iw2 / itw * 100, 1) if itw > 0 else 50.0,
+            },
+            'floorRatio': {
+                'ground':    round(im1, 2),
+                'middle':    round(im2, 2),
+                'top':       round(im3, 2),
+                'groundPct': round(im1 / itm * 100, 1) if itm > 0 else 33.3,
+                'middlePct': round(im2 / itm * 100, 1) if itm > 0 else 33.3,
+                'topPct':    round(im3 / itm * 100, 1) if itm > 0 else 33.3,
+            },
         })
 
     # ══════════════════════════════════════════════════════════════════════════

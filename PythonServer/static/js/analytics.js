@@ -8,6 +8,7 @@ let dowChart        = null;
 let wheelRatioChart = null;
 let floorRatioChart = null;
 let hourlyChart     = null;
+let speedChart      = null;
 let _heatmapMetric  = 'distance';
 
 // ─── Initialise ───────────────────────────────────────────────────────────────
@@ -116,6 +117,9 @@ function clearStates() {
   document.getElementById('noDataState').classList.add('hidden');
   document.getElementById('summaryCards').classList.add('hidden');
   document.getElementById('deepStatsPanel').classList.add('hidden');
+  // Hide wheel time row (re-shown for intraday in renderSummary)
+  const sumWheelTimeRow = document.getElementById('sumWheelTimeRow');
+  if (sumWheelTimeRow) sumWheelTimeRow.classList.add('hidden');
   // Clear data table
   document.getElementById('dataTableBody').innerHTML = '';
   // Destroy existing charts so canvases are reused cleanly
@@ -125,6 +129,7 @@ function clearStates() {
   if (wheelRatioChart) { wheelRatioChart.destroy(); wheelRatioChart = null; }
   if (floorRatioChart) { floorRatioChart.destroy(); floorRatioChart = null; }
   if (hourlyChart)     { hourlyChart.destroy();     hourlyChart     = null; }
+  if (speedChart)      { speedChart.destroy();      speedChart      = null; }
 }
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
@@ -342,6 +347,23 @@ function renderSummary({ rows, type }) {
   document.getElementById('sumTotalDist').textContent   = (w1 + w2).toFixed(2) + ' m';
   document.getElementById('sumTotalMotion').textContent = (m1 + m2 + m3).toFixed(1) + ' s';
 
+  // For intraday data: compute and show estimated time on wheel
+  if (!isLongterm && rows.length > 1) {
+    let wheelTimeSec = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const dw1 = Math.max(0, (rows[i][1] || 0) - (rows[i - 1][1] || 0));
+      const dw2 = Math.max(0, (rows[i][2] || 0) - (rows[i - 1][2] || 0));
+      if (dw1 + dw2 > 0) {
+        wheelTimeSec += rows[i][0] - rows[i - 1][0];
+      }
+    }
+    const wheelMins = Math.round(wheelTimeSec / 60);
+    const sumWheelTime    = document.getElementById('sumWheelTime');
+    const sumWheelTimeRow = document.getElementById('sumWheelTimeRow');
+    if (sumWheelTime)    sumWheelTime.textContent = `~${wheelMins} min`;
+    if (sumWheelTimeRow) sumWheelTimeRow.classList.remove('hidden');
+  }
+
   document.getElementById('summaryCards').classList.remove('hidden');
 }
 
@@ -351,6 +373,17 @@ function renderSummary({ rows, type }) {
 function _setText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text;
+}
+
+/**
+ * Show elements marked for one data type, hide elements marked for the other.
+ * Uses CSS classes: longterm-only, intraday-only
+ */
+function _setDataTypeVisibility(type) {
+  const showClass = type === 'longterm' ? '.longterm-only' : '.intraday-only';
+  const hideClass = type === 'longterm' ? '.intraday-only' : '.longterm-only';
+  document.querySelectorAll(showClass).forEach((el) => el.classList.remove('hidden'));
+  document.querySelectorAll(hideClass).forEach((el) => el.classList.add('hidden'));
 }
 
 /**
@@ -371,6 +404,14 @@ function renderStats(stats) {
 }
 
 function _renderLongtermStats(stats) {
+  _setDataTypeVisibility('longterm');
+
+  // Reset Row 1 card labels for long-term context
+  _setText('statMedianLabel', 'Median Daily Dist');
+  _setText('statTrendLabel',  'Distance Trend');
+  _setText('statRoll7Label',  'Rolling Avg (7d)');
+  _setText('distDistLabel',   'Daily Distance Distribution');
+
   const ds = stats.distanceStats || {};
   const tr = stats.trend         || {};
   const rl = stats.rolling       || {};
@@ -505,53 +546,243 @@ function _renderLongtermStats(stats) {
   // Row 5: Milestones
   _renderMilestones(stats);
 
-  // Hide intraday hourly panel
-  const hp = document.getElementById('hourlyPanel');
-  if (hp) hp.classList.add('hidden');
+  // Hide intraday-only panels
+  ['hourlyPanel', 'speedPanel', 'activityBreakdownPanel'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
 }
 
 function _renderIntradayStats(stats) {
-  // For intraday data, show the hourly chart only
-  const hp = document.getElementById('hourlyPanel');
-  if (!hp) return;
-  hp.classList.remove('hidden');
+  _setDataTypeVisibility('intraday');
 
-  const hours  = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
-  const hourly = stats.hourlyDist || new Array(24).fill(0);
+  // ── Update Row 1 card labels for single-day context ──────────────────────
+  _setText('statMedianLabel', 'Median Interval Dist');
+  _setText('statTrendLabel', 'Peak Activity Hour');
+  _setText('statRoll7Label', 'Total Wheel Distance');
+  _setText('distDistLabel', 'Per-Interval Distance Distribution');
+  // Clear values that don't apply to intraday
+  _setText('statR2',    '—');
+  _setText('statRoll30', '—');
 
-  hourlyChart = new Chart(document.getElementById('hourlyChart'), {
-    type: 'bar',
-    data: {
-      labels: hours,
-      datasets: [{
-        label: 'Wheel distance (m)',
-        data: hourly,
-        backgroundColor: 'rgba(217,96,14,0.7)',
-        borderColor: '#923717',
-        borderWidth: 1,
-        borderRadius: 3,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, title: { display: true, text: 'm' } } },
-    },
-  });
-
-  // Also show simple stat cards with what we have
+  // ── Row 1: descriptive stats (per-interval) ───────────────────────────────
   const ds = stats.distanceStats || {};
   if (ds.mean != null) {
     _setText('statMedian', ds.median.toFixed(3) + ' m');
     _setText('statMean',   ds.mean.toFixed(3)   + ' m');
     _setText('statCV',     (ds.cv * 100).toFixed(1) + '%');
     _setText('statStd',    ds.std.toFixed(3)    + ' m');
-    // Show peak hour info in trend card
-    if (stats.peakDistHour != null) {
-      _setText('statTrend', `${String(stats.peakDistHour).padStart(2,'0')}:00`);
-      _setText('statR2', 'peak hour');
-    }
+  }
+  if (stats.peakDistHour != null) {
+    _setText('statTrend', `${String(stats.peakDistHour).padStart(2, '0')}:00`);
+  }
+  // Show total wheel distance in rolling-avg card
+  const totalDist = (stats.hourlyDist || []).reduce((a, b) => a + b, 0);
+  _setText('statRoll7',  totalDist.toFixed(2) + ' m');
+
+  // ── Row 3b/c: Wheel and floor ratio doughnuts ──────────────────────────────
+  if (stats.wheelRatio) {
+    const wr = stats.wheelRatio;
+    wheelRatioChart = new Chart(document.getElementById('wheelRatioChart'), {
+      type: 'doughnut',
+      data: {
+        labels: [
+          `Wheel 1 (bottom) ${wr.wheel1Pct}%`,
+          `Wheel 2 (top) ${wr.wheel2Pct}%`,
+        ],
+        datasets: [{
+          data: [wr.wheel1, wr.wheel2],
+          backgroundColor: ['rgba(217,96,14,0.8)', 'rgba(146,55,23,0.8)'],
+          borderColor:     ['#d9600e',              '#923717'],
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  if (stats.floorRatio) {
+    const fr = stats.floorRatio;
+    floorRatioChart = new Chart(document.getElementById('floorRatioChart'), {
+      type: 'doughnut',
+      data: {
+        labels: [
+          `Ground ${fr.groundPct}%`,
+          `Middle ${fr.middlePct}%`,
+          `Top ${fr.topPct}%`,
+        ],
+        datasets: [{
+          data: [fr.ground, fr.middle, fr.top],
+          backgroundColor: [
+            'rgba(239,68,68,0.8)',
+            'rgba(34,197,94,0.8)',
+            'rgba(59,130,246,0.8)',
+          ],
+          borderColor: ['#ef4444', '#22c55e', '#3b82f6'],
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // ── Row 4: Per-interval distance distribution ──────────────────────────────
+  if (ds.min != null) {
+    _setText('statMin', ds.min.toFixed(3) + ' m');
+    _setText('statP25', ds.p25.toFixed(3) + ' m');
+    _setText('statP50', ds.median.toFixed(3) + ' m');
+    _setText('statP75', ds.p75.toFixed(3) + ' m');
+    _setText('statP95', ds.p95.toFixed(3) + ' m');
+    _setText('statMax', ds.max.toFixed(3) + ' m');
+    _drawBoxPlot(ds);
+  }
+
+  // ── Row 5: Milestones ──────────────────────────────────────────────────────
+  _renderMilestones(stats);
+
+  // ── Row 6: Hourly chart ────────────────────────────────────────────────────
+  const hp = document.getElementById('hourlyPanel');
+  if (hp) {
+    hp.classList.remove('hidden');
+    const hours  = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+    const hourly = stats.hourlyDist || new Array(24).fill(0);
+    hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+      type: 'bar',
+      data: {
+        labels: hours,
+        datasets: [{
+          label: 'Wheel distance (m)',
+          data: hourly,
+          backgroundColor: 'rgba(217,96,14,0.7)',
+          borderColor: '#923717',
+          borderWidth: 1,
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'm' } } },
+      },
+    });
+  }
+
+  // ── Row 7: Speed analytics ─────────────────────────────────────────────────
+  _renderSpeedStats(stats);
+
+  // ── Row 8: Activity time breakdown ────────────────────────────────────────
+  _renderActivityBreakdown(stats);
+}
+
+/** Render speed analytics panel for intraday data. */
+function _renderSpeedStats(stats) {
+  const sp = stats.speedStats || {};
+  const panel = document.getElementById('speedPanel');
+  if (!panel || sp.mean == null) return;
+
+  panel.classList.remove('hidden');
+
+  _setText('speedMean',   sp.mean.toFixed(2)            + ' km/h');
+  _setText('speedMedian', sp.median.toFixed(2)           + ' km/h');
+  _setText('speedMax',    sp.max.toFixed(2)              + ' km/h');
+  _setText('speedMin',    sp.min.toFixed(2)              + ' km/h');
+  _setText('speedCV',     (sp.cv * 100).toFixed(1)       + '%');
+  _setText('speedStd',    sp.std.toFixed(2)              + ' km/h');
+
+  const tr = stats.speedTrend || {};
+  if (tr.slope != null) {
+    const slope = tr.slope;
+    const arrow = slope > 0.01 ? '↑' : slope < -0.01 ? '↓' : '→';
+    _setText('speedTrend',   `${arrow} ${Math.abs(slope).toFixed(3)} km/h`);
+    _setText('speedTrendR2', tr.r2 != null ? tr.r2.toFixed(3) : '—');
+  }
+
+  // Speed-over-time chart: plot speed at each active interval
+  const timestamps = stats.speedTimestamps || [];
+  const speeds     = stats.speedValues     || [];
+  if (timestamps.length > 0) {
+    const labels = timestamps.map((ts) =>
+      new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    );
+
+    // 5-interval rolling average for a smoother trend line
+    const roll5 = speeds.map((_, i) => {
+      const chunk = speeds.slice(Math.max(0, i - 4), i + 1);
+      return chunk.reduce((a, b) => a + b, 0) / chunk.length;
+    });
+
+    speedChart = new Chart(document.getElementById('speedChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Speed (km/h)',
+            data: speeds,
+            borderColor: '#d9600e',
+            backgroundColor: 'rgba(217,96,14,0.1)',
+            fill: true,
+            tension: 0.2,
+            pointRadius: speeds.length > 80 ? 0 : 2,
+            order: 1,
+          },
+          {
+            label: '5-interval rolling avg',
+            data: roll5,
+            borderColor: '#7c3aed',
+            borderWidth: 2,
+            borderDash: [5, 3],
+            fill: false,
+            tension: 0.4,
+            pointRadius: 0,
+            order: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'km/h' } },
+        },
+      },
+    });
+  }
+}
+
+/** Render the intraday activity time breakdown panel. */
+function _renderActivityBreakdown(stats) {
+  const panel = document.getElementById('activityBreakdownPanel');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+
+  const fmtTime = (secs) => {
+    if (secs >= 3600) return `${(secs / 3600).toFixed(1)} h`;
+    if (secs >= 60)   return `${Math.round(secs / 60)} min`;
+    return `${Math.round(secs)} s`;
+  };
+
+  if (stats.timeOnWheel != null) {
+    _setText('actWheelTime', fmtTime(stats.timeOnWheel));
+  }
+
+  const fr = stats.floorRatio;
+  if (fr) {
+    _setText('actGround', fmtTime(fr.ground));
+    _setText('actMiddle', fmtTime(fr.middle));
+    _setText('actTop',    fmtTime(fr.top));
   }
 }
 

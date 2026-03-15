@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Live Status – Chocolate's Monitor{% endblock %}
+
+{% block content %}
+  <!-- Page header -->
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <h1 class="text-3xl font-bold text-hamster-800">📡 Live Status</h1>
+      <p class="text-hamster-500 text-sm mt-1">Real-time wheel speed, RPM, and sensor state</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="statusDot" class="inline-block w-3 h-3 rounded-full bg-hamster-300"></span>
+      <span id="statusText" class="text-xs text-hamster-500 font-medium">Connecting…</span>
+      <button onclick="fetchNow()" class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">
+        Refresh ↺
+      </button>
+    </div>
+  </div>
+
+  <!-- Wheel cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+
+    <!-- Wheel 1 (Big Wheel) -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Wheel 1</p>
+          <p class="text-hamster-800 font-bold text-lg leading-tight">Big Wheel</p>
+        </div>
+        <span id="w1-badge"
+              class="text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400">
+          —
+        </span>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Speed</p>
+          <p id="w1-speed" class="text-2xl font-bold text-hamster-800">—</p>
+          <p id="w1-speed-kmh" class="text-xs text-hamster-400 mt-0.5">—</p>
+        </div>
+        <div>
+          <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">RPM</p>
+          <p id="w1-rpm" class="text-2xl font-bold text-hamster-800">—</p>
+        </div>
+        <div class="col-span-2">
+          <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Today's Distance</p>
+          <p id="w1-dist" class="text-xl font-bold text-hamster-700">—</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wheel 2 (Small Wheel) -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Wheel 2</p>
+          <p class="text-hamster-800 font-bold text-lg leading-tight">Small Wheel</p>
+        </div>
+        <span id="w2-badge"
+              class="text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400">
+          —
+        </span>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Speed</p>
+          <p id="w2-speed" class="text-2xl font-bold text-hamster-800">—</p>
+          <p id="w2-speed-kmh" class="text-xs text-hamster-400 mt-0.5">—</p>
+        </div>
+        <div>
+          <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">RPM</p>
+          <p id="w2-rpm" class="text-2xl font-bold text-hamster-800">—</p>
+        </div>
+        <div class="col-span-2">
+          <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Today's Distance</p>
+          <p id="w2-dist" class="text-xl font-bold text-hamster-700">—</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Sensor state + Session stats -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+
+    <!-- Sensor state -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <h2 class="text-sm font-bold text-hamster-800 uppercase tracking-wide mb-4">📍 Sensor State</h2>
+      <div class="space-y-3 text-sm">
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Location</span>
+          <span id="sensor-location" class="font-bold text-hamster-800 capitalize">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Motion Level</span>
+          <span id="sensor-motion-level" class="font-bold text-hamster-800">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Wheel Last Used</span>
+          <span id="sensor-wheel-last" class="font-bold text-hamster-800">—</span>
+        </div>
+        <hr class="border-hamster-100">
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Last Active</span>
+          <span id="sensor-last-active" class="font-bold text-hamster-800">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">ESP32</span>
+          <span id="sensor-esp32" class="font-bold">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session stats -->
+    <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+      <h2 class="text-sm font-bold text-hamster-800 uppercase tracking-wide mb-4">📊 Session Stats</h2>
+      <div class="space-y-3 text-sm">
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Avg Speed</span>
+          <div class="text-right">
+            <span id="stats-avespeed" class="font-bold text-hamster-800">—</span>
+            <span id="stats-avespeed-kmh" class="text-xs text-hamster-400 ml-1">—</span>
+          </div>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Max Speed</span>
+          <div class="text-right">
+            <span id="stats-maxspeed" class="font-bold text-hamster-800">—</span>
+            <span id="stats-maxspeed-kmh" class="text-xs text-hamster-400 ml-1">—</span>
+          </div>
+        </div>
+        <hr class="border-hamster-100">
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Under Cover</span>
+          <span id="stats-motion1" class="font-bold text-hamster-800">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Open-space</span>
+          <span id="stats-motion2" class="font-bold text-hamster-800">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-hamster-500 font-medium">Mezzanine</span>
+          <span id="stats-motion3" class="font-bold text-hamster-800">—</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="text-xs text-hamster-400 text-center">
+    Updates every 5 seconds by querying the ESP32 directly.
+  </p>
+
+  <script>
+  (function () {
+    // ── Constants ──────────────────────────────────────────────────────────────
+    // These match the ESP32 firmware's hard-coded reference diameter and the
+    // server's configured wheel diameters.  /api/config provides the real values
+    // which override these defaults on first load.
+    const WHEEL1_DIAM_CM      = 30;    // big wheel
+    const WHEEL2_DIAM_CM      = 14;    // small wheel
+    const ESP32_BASE_DIAM_CM  = 13.5;  // firmware reference diameter
+    const TIME_PAUSE_MS       = 10000; // ESP32 considers > 10 s a stop
+
+    let w1Diam = WHEEL1_DIAM_CM;
+    let w2Diam = WHEEL2_DIAM_CM;
+    let configLoaded = false;
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function fmt1(n)   { return Number(n).toFixed(1); }
+    function fmt2(n)   { return Number(n).toFixed(2); }
+
+    function fmtMs(s) {
+      // Format seconds as "Xm Ys" or "Xs"
+      const mins = Math.floor(s / 60);
+      const secs = Math.round(s % 60);
+      return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    }
+
+    /**
+     * Calculate current RPM from the elapsed milliseconds since the last wheel
+     * revolution.  Returns 0 when the wheel is stationary (elapsed ≥ TIME_PAUSE_MS).
+     *
+     * Each reed-switch trigger corresponds to exactly one full revolution, so
+     * RPM = 60 000 ms/min ÷ elapsed_ms_per_rev.
+     */
+    function calcRPM(lastwheelmillis) {
+      if (lastwheelmillis <= 0 || lastwheelmillis >= TIME_PAUSE_MS) return 0;
+      return 60000 / lastwheelmillis;
+    }
+
+    /**
+     * Calculate current speed in m/s from the elapsed milliseconds since the
+     * last revolution and the actual wheel diameter.
+     *
+     * The ESP32 firmware tracks revolutions using a sensor that fires once per
+     * revolution.  The time between two consecutive triggers equals the period
+     * of one revolution, so speed = circumference / elapsed_seconds.
+     */
+    function calcSpeed(lastwheelmillis, diamCm) {
+      if (lastwheelmillis <= 0 || lastwheelmillis >= TIME_PAUSE_MS) return 0;
+      const circumfM = Math.PI * diamCm / 100;
+      return circumfM / (lastwheelmillis / 1000);
+    }
+
+    function setBadge(el, active) {
+      if (active) {
+        el.textContent = 'RUNNING';
+        el.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700';
+      } else {
+        el.textContent = 'IDLE';
+        el.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400';
+      }
+    }
+
+    // ── DOM helpers ────────────────────────────────────────────────────────────
+    function el(id) { return document.getElementById(id); }
+    function setText(id, val) { el(id).textContent = val; }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
+    function render(d) {
+      const lwm          = d.lastwheelmillis || 0;
+      const wheelLast    = Math.round(d.wheelNumberLast || 1);
+      const wheelActive  = lwm > 0 && lwm < TIME_PAUSE_MS;
+
+      const w1Active = wheelActive && wheelLast === 1;
+      const w2Active = wheelActive && wheelLast === 2;
+
+      // Wheel 1
+      const w1Speed = w1Active ? calcSpeed(lwm, w1Diam) : 0;
+      const w1RPM   = w1Active ? calcRPM(lwm)           : 0;
+      setBadge(el('w1-badge'), w1Active);
+      setText('w1-speed',     w1Active ? fmt2(w1Speed) + ' m/s' : '0.00 m/s');
+      setText('w1-speed-kmh', w1Active ? fmt2(w1Speed * 3.6) + ' km/h' : '—');
+      setText('w1-rpm',       w1Active ? fmt1(w1RPM) + ' rpm'  : '0 rpm');
+      setText('w1-dist',      fmt2(d.distance1 || 0) + ' m');
+
+      // Wheel 2
+      const w2Speed = w2Active ? calcSpeed(lwm, w2Diam) : 0;
+      const w2RPM   = w2Active ? calcRPM(lwm)           : 0;
+      setBadge(el('w2-badge'), w2Active);
+      setText('w2-speed',     w2Active ? fmt2(w2Speed) + ' m/s' : '0.00 m/s');
+      setText('w2-speed-kmh', w2Active ? fmt2(w2Speed * 3.6) + ' km/h' : '—');
+      setText('w2-rpm',       w2Active ? fmt1(w2RPM) + ' rpm'  : '0 rpm');
+      setText('w2-dist',      fmt2(d.distance2 || 0) + ' m');
+
+      // Sensor state
+      const motionLevels = { 1: 'Level 1 – under cover', 2: 'Level 2 – open-space', 3: 'Level 3 – mezzanine' };
+      const motionLevel  = Math.round(d.motionLevelLast || 0);
+      setText('sensor-location',    d.lastLocation  || '—');
+      setText('sensor-motion-level', motionLevel > 0 ? (motionLevels[motionLevel] || `Level ${motionLevel}`) : '—');
+      setText('sensor-wheel-last',   wheelLast === 1 ? 'Wheel 1 (big)' : (wheelLast === 2 ? 'Wheel 2 (small)' : '—'));
+
+      const minsAgo = d.lastActiveMinsAgo;
+      setText('sensor-last-active', minsAgo === 0 ? 'just now' : `${minsAgo} min ago`);
+
+      const esp32El = el('sensor-esp32');
+      if (d.esp32Online) {
+        esp32El.textContent = 'Online ✓';
+        esp32El.className = 'font-bold text-green-600';
+      } else {
+        esp32El.textContent = 'Offline ✗';
+        esp32El.className = 'font-bold text-red-600';
+      }
+
+      // Session stats
+      const aveMs  = d.avespeed  || 0;
+      const maxMs  = d.maxspeed  || 0;
+      setText('stats-avespeed',     fmt2(aveMs) + ' m/s');
+      setText('stats-avespeed-kmh', '(' + fmt2(aveMs * 3.6) + ' km/h)');
+      setText('stats-maxspeed',     fmt2(maxMs) + ' m/s');
+      setText('stats-maxspeed-kmh', '(' + fmt2(maxMs * 3.6) + ' km/h)');
+      setText('stats-motion1', fmtMs(d.motion1count || 0));
+      setText('stats-motion2', fmtMs(d.motion2count || 0));
+      setText('stats-motion3', fmtMs(d.motion3count || 0));
+
+      // Connection indicator
+      const dot  = el('statusDot');
+      const text = el('statusText');
+      if (d.esp32Online) {
+        dot.className  = 'inline-block w-3 h-3 rounded-full bg-green-500';
+        text.textContent = 'Live · ' + new Date().toLocaleTimeString();
+      } else {
+        dot.className  = 'inline-block w-3 h-3 rounded-full bg-red-500';
+        text.textContent = 'ESP32 offline · ' + new Date().toLocaleTimeString();
+      }
+    }
+
+    // ── Fetch ──────────────────────────────────────────────────────────────────
+    async function fetchConfig() {
+      try {
+        const r = await fetch('/api/config');
+        if (!r.ok) return;
+        const cfg = await r.json();
+        if (cfg.wheel1DiameterCm) w1Diam = cfg.wheel1DiameterCm;
+        if (cfg.wheel2DiameterCm) w2Diam = cfg.wheel2DiameterCm;
+        configLoaded = true;
+      } catch (_) { /* fall back to defaults */ }
+    }
+
+    async function fetchNow() {
+      const dot  = el('statusDot');
+      const text = el('statusText');
+      dot.className    = 'inline-block w-3 h-3 rounded-full bg-yellow-400';
+      text.textContent = 'Fetching…';
+      try {
+        const r = await fetch('/api/live-now');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        render(d);
+      } catch (err) {
+        dot.className    = 'inline-block w-3 h-3 rounded-full bg-red-500';
+        text.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    // Expose so the Refresh button works
+    window.fetchNow = fetchNow;
+
+    // ── Boot ───────────────────────────────────────────────────────────────────
+    fetchConfig().then(fetchNow);
+    setInterval(fetchNow, 5000);
+  })();
+  </script>
+{% endblock %}

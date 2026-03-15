@@ -18,6 +18,16 @@ const CSV_DIR  = process.env.CSV_DIR  || '/var/www/html/hamsterlogger';
 // SSL certs live alongside this file in /var/node/cert (set CERT_DIR to override).
 const CERT_DIR = process.env.CERT_DIR || __dirname;
 
+// Wheel diameters (cm).  Must match the physical wheels installed in the cage.
+// The ESP32 firmware uses a hard-coded 13.5 cm reference diameter; the server
+// applies corrections when the actual diameters differ.
+const ESP32_BASE_DIAM_CM = 13.5;
+const WHEEL1_DIAMETER_CM = parseFloat(process.env.WHEEL1_DIAMETER_CM || '30');
+const WHEEL2_DIAMETER_CM = parseFloat(process.env.WHEEL2_DIAMETER_CM || '14');
+
+// Date of cage upgrade (YYYY-MM-DD); analytics labels differ before/after.
+const CAGE_UPGRADE_DATE = process.env.CAGE_UPGRADE_DATE || '2026-03-15';
+
 // Hamster birthday
 const BIRTH_DATE = new Date('2025-09-07');
 
@@ -53,11 +63,9 @@ const CACHE_TTL_MS = 30_000;
 let esp32Cache   = null;
 let esp32CacheAt = 0;
 
-async function getESP32Data() {
-  if (esp32Cache && (Date.now() - esp32CacheAt) < CACHE_TTL_MS) {
-    return esp32Cache;
-  }
-
+/** Fetch all ESP32 endpoints in parallel and return the processed data object.
+ *  Does NOT interact with the cache – callers decide whether to store the result. */
+async function _fetchESP32Data() {
   const base      = `http://${ESP32_IP}/d`;
   const endpoints = [
     'avespeed', 'maxspeed', 'distance1', 'distance2',
@@ -109,8 +117,17 @@ async function getESP32Data() {
   const h             = raw.humanYears;
   raw.hamsterYears    = -1.3415 * h ** 4 + 15.678 * h ** 3 - 54.837 * h ** 2 + 92.659 * h + 2.3173;
 
+  return raw;
+}
+
+async function getESP32Data() {
+  if (esp32Cache && (Date.now() - esp32CacheAt) < CACHE_TTL_MS) {
+    return esp32Cache;
+  }
+
+  const raw = await _fetchESP32Data();
   esp32Cache   = raw;
-  esp32CacheAt = nowMs;
+  esp32CacheAt = Date.now();
   return raw;
 }
 
@@ -209,6 +226,11 @@ app.get('/analytics', (_req, res) => {
   res.send(renderAnalytics());
 });
 
+// Live status page (real-time RPM, speed, sensor state)
+app.get('/live-status', (_req, res) => {
+  res.send(renderLiveStatus());
+});
+
 // Kindle-friendly page (no JS)
 app.get('/kindle', async (_req, res) => {
   const [esp32, ltSummary] = await Promise.all([
@@ -222,6 +244,17 @@ app.get('/kindle', async (_req, res) => {
 app.get('/api/live', async (_req, res) => {
   try {
     res.json(await getESP32Data());
+  } catch {
+    res.status(503).json({ error: 'ESP32 unavailable' });
+  }
+});
+
+// API – fresh (non-cached) live ESP32 data for the live-status page
+app.get('/api/live-now', async (_req, res) => {
+  try {
+    // Fetch directly from the ESP32 without reading or writing the shared cache
+    // so concurrent requests to /api/live are unaffected.
+    res.json(await _fetchESP32Data());
   } catch {
     res.status(503).json({ error: 'ESP32 unavailable' });
   }
@@ -367,6 +400,18 @@ app.get('/api/status', (_req, res) => {
   });
 });
 
+// API – wheel-size and cage configuration
+app.get('/api/config', (_req, res) => {
+  res.json({
+    wheel1DiameterCm:    WHEEL1_DIAMETER_CM,
+    wheel2DiameterCm:    WHEEL2_DIAMETER_CM,
+    wheel1CircumfM:      parseFloat((Math.PI * WHEEL1_DIAMETER_CM / 100).toFixed(6)),
+    wheel2CircumfM:      parseFloat((Math.PI * WHEEL2_DIAMETER_CM / 100).toFixed(6)),
+    esp32BaseDiameterCm: ESP32_BASE_DIAM_CM,
+    upgradeDate:         CAGE_UPGRADE_DATE,
+  });
+});
+
 // ─── Page renderers ───────────────────────────────────────────────────────────
 
 /** Shared HTML layout – uses locally-built Tailwind CSS (public/css/styles.css). */
@@ -391,9 +436,10 @@ function layout(title, bodyContent) {
       </a>
       <!-- Desktop navigation links (hidden on small screens) -->
       <div id="navLinks" class="flex gap-6 text-sm font-medium" style="display:none">
-        <a href="/"          class="hover:text-hamster-200 transition-colors">Home</a>
-        <a href="/analytics" class="hover:text-hamster-200 transition-colors">Analytics</a>
-        <a href="/kindle"    class="hover:text-hamster-200 transition-colors">Kindle</a>
+        <a href="/"            class="hover:text-hamster-200 transition-colors">Home</a>
+        <a href="/analytics"   class="hover:text-hamster-200 transition-colors">Analytics</a>
+        <a href="/live-status" class="hover:text-hamster-200 transition-colors">Live</a>
+        <a href="/kindle"      class="hover:text-hamster-200 transition-colors">Kindle</a>
       </div>
       <!-- Hamburger button (hidden on large screens) -->
       <button id="navToggle" aria-label="Toggle menu"
@@ -416,9 +462,10 @@ function layout(title, bodyContent) {
     <!-- Mobile dropdown menu -->
     <div id="mobileMenu" style="display:none;background:#782f16;border-top:1px solid rgba(255,255,255,0.15)">
       <div class="max-w-6xl mx-auto px-4 py-2" style="display:flex;flex-direction:column;gap:2px">
-        <a href="/"          style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Home</a>
-        <a href="/analytics" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Analytics</a>
-        <a href="/kindle"    style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Kindle</a>
+        <a href="/"            style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Home</a>
+        <a href="/analytics"   style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Analytics</a>
+        <a href="/live-status" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Live</a>
+        <a href="/kindle"      style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Kindle</a>
       </div>
     </div>
   </nav>
@@ -751,6 +798,292 @@ function renderAnalytics() {
     <!-- Dependencies (locally bundled, no CDN) -->
     <script src="/js/chart.umd.min.js"></script>
     <script src="/js/analytics.js"></script>
+  `);
+}
+
+function renderLiveStatus() {
+  return layout("Live Status – Chocolate's Monitor", `
+    <!-- Page header -->
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div>
+        <h1 class="text-3xl font-bold text-hamster-800">📡 Live Status</h1>
+        <p class="text-hamster-500 text-sm mt-1">Real-time wheel speed, RPM, and sensor state</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="statusDot" class="inline-block w-3 h-3 rounded-full bg-hamster-300"></span>
+        <span id="statusText" class="text-xs text-hamster-500 font-medium">Connecting…</span>
+        <button onclick="fetchNow()" class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">
+          Refresh ↺
+        </button>
+      </div>
+    </div>
+
+    <!-- Wheel cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+
+      <!-- Wheel 1 (Big Wheel) -->
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Wheel 1</p>
+            <p class="text-hamster-800 font-bold text-lg leading-tight">Big Wheel</p>
+          </div>
+          <span id="w1-badge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400">
+            —
+          </span>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Speed</p>
+            <p id="w1-speed" class="text-2xl font-bold text-hamster-800">—</p>
+            <p id="w1-speed-kmh" class="text-xs text-hamster-400 mt-0.5">—</p>
+          </div>
+          <div>
+            <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">RPM</p>
+            <p id="w1-rpm" class="text-2xl font-bold text-hamster-800">—</p>
+          </div>
+          <div class="col-span-2">
+            <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Today's Distance</p>
+            <p id="w1-dist" class="text-xl font-bold text-hamster-700">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wheel 2 (Small Wheel) -->
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <p class="text-xs text-hamster-500 uppercase tracking-wide font-semibold">Wheel 2</p>
+            <p class="text-hamster-800 font-bold text-lg leading-tight">Small Wheel</p>
+          </div>
+          <span id="w2-badge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400">
+            —
+          </span>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Speed</p>
+            <p id="w2-speed" class="text-2xl font-bold text-hamster-800">—</p>
+            <p id="w2-speed-kmh" class="text-xs text-hamster-400 mt-0.5">—</p>
+          </div>
+          <div>
+            <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">RPM</p>
+            <p id="w2-rpm" class="text-2xl font-bold text-hamster-800">—</p>
+          </div>
+          <div class="col-span-2">
+            <p class="text-xs text-hamster-400 uppercase tracking-wide font-semibold mb-0.5">Today's Distance</p>
+            <p id="w2-dist" class="text-xl font-bold text-hamster-700">—</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Sensor state + Session stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+
+      <!-- Sensor state -->
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <h2 class="text-sm font-bold text-hamster-800 uppercase tracking-wide mb-4">📍 Sensor State</h2>
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Location</span>
+            <span id="sensor-location" class="font-bold text-hamster-800 capitalize">—</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Motion Level</span>
+            <span id="sensor-motion-level" class="font-bold text-hamster-800">—</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Wheel Last Used</span>
+            <span id="sensor-wheel-last" class="font-bold text-hamster-800">—</span>
+          </div>
+          <hr class="border-hamster-100">
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Last Active</span>
+            <span id="sensor-last-active" class="font-bold text-hamster-800">—</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">ESP32</span>
+            <span id="sensor-esp32" class="font-bold">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session stats -->
+      <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
+        <h2 class="text-sm font-bold text-hamster-800 uppercase tracking-wide mb-4">📊 Session Stats</h2>
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Avg Speed</span>
+            <div class="text-right">
+              <span id="stats-avespeed" class="font-bold text-hamster-800">—</span>
+              <span id="stats-avespeed-kmh" class="text-xs text-hamster-400 ml-1">—</span>
+            </div>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Max Speed</span>
+            <div class="text-right">
+              <span id="stats-maxspeed" class="font-bold text-hamster-800">—</span>
+              <span id="stats-maxspeed-kmh" class="text-xs text-hamster-400 ml-1">—</span>
+            </div>
+          </div>
+          <hr class="border-hamster-100">
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Under Cover</span>
+            <span id="stats-motion1" class="font-bold text-hamster-800">—</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Open-space</span>
+            <span id="stats-motion2" class="font-bold text-hamster-800">—</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-hamster-500 font-medium">Mezzanine</span>
+            <span id="stats-motion3" class="font-bold text-hamster-800">—</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="text-xs text-hamster-400 text-center">
+      Updates every 5 seconds by querying the ESP32 directly.
+    </p>
+
+    <script>
+    (function () {
+      const WHEEL1_DIAM_CM = 30;
+      const WHEEL2_DIAM_CM = 14;
+      const TIME_PAUSE_MS  = 10000;
+
+      let w1Diam = WHEEL1_DIAM_CM;
+      let w2Diam = WHEEL2_DIAM_CM;
+
+      function fmt1(n)   { return Number(n).toFixed(1); }
+      function fmt2(n)   { return Number(n).toFixed(2); }
+      function fmtMs(s)  {
+        const mins = Math.floor(s / 60);
+        const secs = Math.round(s % 60);
+        return mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+      }
+
+      function calcRPM(lwm) {
+        if (lwm <= 0 || lwm >= TIME_PAUSE_MS) return 0;
+        return 60000 / lwm;
+      }
+
+      function calcSpeed(lwm, diamCm) {
+        if (lwm <= 0 || lwm >= TIME_PAUSE_MS) return 0;
+        return (Math.PI * diamCm / 100) / (lwm / 1000);
+      }
+
+      function setBadge(id, active) {
+        var el = document.getElementById(id);
+        if (active) {
+          el.textContent = 'RUNNING';
+          el.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700';
+        } else {
+          el.textContent = 'IDLE';
+          el.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400';
+        }
+      }
+
+      function setText(id, val) { document.getElementById(id).textContent = val; }
+
+      function render(d) {
+        var lwm        = d.lastwheelmillis || 0;
+        var wheelLast  = Math.round(d.wheelNumberLast || 1);
+        var wheelActive = lwm > 0 && lwm < TIME_PAUSE_MS;
+        var w1Active   = wheelActive && wheelLast === 1;
+        var w2Active   = wheelActive && wheelLast === 2;
+
+        var w1Speed = w1Active ? calcSpeed(lwm, w1Diam) : 0;
+        var w1RPM   = w1Active ? calcRPM(lwm) : 0;
+        setBadge('w1-badge', w1Active);
+        setText('w1-speed',     w1Active ? fmt2(w1Speed) + ' m/s' : '0.00 m/s');
+        setText('w1-speed-kmh', w1Active ? fmt2(w1Speed * 3.6) + ' km/h' : '—');
+        setText('w1-rpm',       w1Active ? fmt1(w1RPM) + ' rpm' : '0 rpm');
+        setText('w1-dist',      fmt2(d.distance1 || 0) + ' m');
+
+        var w2Speed = w2Active ? calcSpeed(lwm, w2Diam) : 0;
+        var w2RPM   = w2Active ? calcRPM(lwm) : 0;
+        setBadge('w2-badge', w2Active);
+        setText('w2-speed',     w2Active ? fmt2(w2Speed) + ' m/s' : '0.00 m/s');
+        setText('w2-speed-kmh', w2Active ? fmt2(w2Speed * 3.6) + ' km/h' : '—');
+        setText('w2-rpm',       w2Active ? fmt1(w2RPM) + ' rpm' : '0 rpm');
+        setText('w2-dist',      fmt2(d.distance2 || 0) + ' m');
+
+        var motionLevels = { 1: 'Level 1 – under cover', 2: 'Level 2 – open-space', 3: 'Level 3 – mezzanine' };
+        var motionLevel  = Math.round(d.motionLevelLast || 0);
+        setText('sensor-location',     d.lastLocation || '—');
+        setText('sensor-motion-level', motionLevel > 0 ? (motionLevels[motionLevel] || 'Level ' + motionLevel) : '—');
+        setText('sensor-wheel-last',   wheelLast === 1 ? 'Wheel 1 (big)' : (wheelLast === 2 ? 'Wheel 2 (small)' : '—'));
+
+        var minsAgo = d.lastActiveMinsAgo;
+        setText('sensor-last-active', minsAgo === 0 ? 'just now' : minsAgo + ' min ago');
+
+        var esp32El = document.getElementById('sensor-esp32');
+        if (d.esp32Online) {
+          esp32El.textContent = 'Online ✓';
+          esp32El.className = 'font-bold text-green-600';
+        } else {
+          esp32El.textContent = 'Offline ✗';
+          esp32El.className = 'font-bold text-red-600';
+        }
+
+        var aveMs = d.avespeed || 0;
+        var maxMs = d.maxspeed || 0;
+        setText('stats-avespeed',     fmt2(aveMs) + ' m/s');
+        setText('stats-avespeed-kmh', '(' + fmt2(aveMs * 3.6) + ' km/h)');
+        setText('stats-maxspeed',     fmt2(maxMs) + ' m/s');
+        setText('stats-maxspeed-kmh', '(' + fmt2(maxMs * 3.6) + ' km/h)');
+        setText('stats-motion1', fmtMs(d.motion1count || 0));
+        setText('stats-motion2', fmtMs(d.motion2count || 0));
+        setText('stats-motion3', fmtMs(d.motion3count || 0));
+
+        var dot  = document.getElementById('statusDot');
+        var text = document.getElementById('statusText');
+        if (d.esp32Online) {
+          dot.className  = 'inline-block w-3 h-3 rounded-full bg-green-500';
+          text.textContent = 'Live · ' + new Date().toLocaleTimeString();
+        } else {
+          dot.className  = 'inline-block w-3 h-3 rounded-full bg-red-500';
+          text.textContent = 'ESP32 offline · ' + new Date().toLocaleTimeString();
+        }
+      }
+
+      async function fetchConfig() {
+        try {
+          var r = await fetch('/api/config');
+          if (!r.ok) return;
+          var cfg = await r.json();
+          if (cfg.wheel1DiameterCm) w1Diam = cfg.wheel1DiameterCm;
+          if (cfg.wheel2DiameterCm) w2Diam = cfg.wheel2DiameterCm;
+        } catch (_) {}
+      }
+
+      async function fetchNow() {
+        var dot  = document.getElementById('statusDot');
+        var text = document.getElementById('statusText');
+        dot.className    = 'inline-block w-3 h-3 rounded-full bg-yellow-400';
+        text.textContent = 'Fetching…';
+        try {
+          var r = await fetch('/api/live-now');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var d = await r.json();
+          render(d);
+        } catch (err) {
+          dot.className    = 'inline-block w-3 h-3 rounded-full bg-red-500';
+          text.textContent = 'Error: ' + err.message;
+        }
+      }
+
+      window.fetchNow = fetchNow;
+
+      fetchConfig().then(fetchNow);
+      setInterval(fetchNow, 5000);
+    })();
+    </script>
   `);
 }
 

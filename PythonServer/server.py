@@ -87,12 +87,17 @@ def _http_get(url, timeout=3):
         return '0'
 
 
-def get_esp32_data():
-    """Return cached ESP32 metrics, refreshing the cache when it has expired."""
+def get_esp32_data(fresh=False):
+    """Return cached ESP32 metrics, refreshing the cache when it has expired.
+
+    When *fresh* is ``True`` the cache is bypassed and the ESP32 is queried
+    directly.  The result still updates the shared cache so subsequent calls
+    with ``fresh=False`` benefit from the latest reading.
+    """
     global _esp32_cache, _esp32_cache_at
 
     with _cache_lock:
-        if _esp32_cache and (time.monotonic() - _esp32_cache_at) < CACHE_TTL:
+        if not fresh and _esp32_cache and (time.monotonic() - _esp32_cache_at) < CACHE_TTL:
             return _esp32_cache
 
     base = f'http://{ESP32_IP}/d'
@@ -447,10 +452,28 @@ def kindle():
     )
 
 
+@app.route('/live-status')
+def live_status():
+    return render_template('live_status.html')
+
+
 @app.route('/api/live')
 def api_live():
     try:
         return jsonify(get_esp32_data())
+    except Exception:
+        return jsonify({'error': 'ESP32 unavailable'}), 503
+
+
+@app.route('/api/live-now')
+def api_live_now():
+    """Return a fresh (non-cached) snapshot of current ESP32 metrics.
+
+    Unlike ``/api/live`` this endpoint always queries the ESP32 directly so
+    that the live-status page can display near-real-time wheel speed and RPM.
+    """
+    try:
+        return jsonify(get_esp32_data(fresh=True))
     except Exception:
         return jsonify({'error': 'ESP32 unavailable'}), 503
 

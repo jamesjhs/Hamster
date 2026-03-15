@@ -42,6 +42,15 @@ ESP32_IP   = os.environ.get('ESP32_IP', '192.168.1.98')
 CSV_DIR    = Path(os.environ.get('CSV_DIR', '/var/hamsterlogger'))
 BIRTH_DATE = datetime(2025, 9, 7, tzinfo=timezone.utc)
 
+# Wheel diameter configuration (cm).  Set WHEEL1_DIAMETER_CM / WHEEL2_DIAMETER_CM
+# environment variables when the physical wheels differ from the ESP32 firmware's
+# reference diameter (13.5 cm).  The poller uses these to convert the cm distances
+# reported by the ESP32 into metres and to apply a per-wheel correction when the
+# actual diameter differs from the firmware reference.
+_ESP32_BASE_DIAM_CM  = 13.5  # diameter (cm) hard-coded in the ESP32 firmware
+WHEEL1_DIAMETER_CM   = float(os.environ.get('WHEEL1_DIAMETER_CM', _ESP32_BASE_DIAM_CM))
+WHEEL2_DIAMETER_CM   = float(os.environ.get('WHEEL2_DIAMETER_CM', _ESP32_BASE_DIAM_CM))
+
 # ─── App ───────────────────────────────────────────────────────────────────────
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -117,13 +126,13 @@ def get_esp32_data():
     elif raw.get('lastwheelmillis') == 0 and raw.get('lastmotionmillis') == 0:
         raw['lastLocation'] = 'unknown'
     elif raw.get('lastmotionmillis', 0) < raw.get('lastwheelmillis', float('inf')):
-        levels = {1: 'ground level', 2: 'middle level', 3: 'top level'}
+        levels = {1: 'basement', 2: 'mezzanine', 3: 'open-space'}
         raw['lastLocation'] = levels.get(
             round(raw.get('motionLevelLast', 0)), 'unknown level'
         )
     else:
         wheel_num = round(raw.get('wheelNumberLast', 1))
-        raw['lastLocation'] = 'wheel 1 (bottom)' if wheel_num == 1 else 'wheel 2 (top)'
+        raw['lastLocation'] = 'wheel 1' if wheel_num == 1 else 'wheel 2'
 
     # Age calculation using a polynomial hamster-year conversion.
     now_dt = datetime.now(timezone.utc)
@@ -233,14 +242,37 @@ def load_blog_posts():
 
 _last_poll_hour = -1
 
+# Per-day maximum and cumulative offset for each of the five logged metrics
+# (distance1, distance2, motion1, motion2, motion3).  Tracking these lets the
+# poller detect mid-day ESP32 resets (power cut / cage clean) and continue
+# accumulating daily totals from where they left off before the reset.
+_daily_max    = [0.0, 0.0, 0.0, 0.0, 0.0]
+_daily_offset = [0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def _wheel_cm_to_m(raw_cm, actual_diam_cm):
+    """Convert a raw ESP32 distance (cm, based on the firmware reference
+    diameter) to metres using the wheel's actual diameter."""
+    return raw_cm * (actual_diam_cm / _ESP32_BASE_DIAM_CM) / 100.0
+
 
 def _poll_esp32():
     """Fetch the five logged metrics from the ESP32 and append to CSV files.
 
+    The ESP32 reports wheel distances in centimetres (revolution count ×
+    circumference in cm).  This function converts them to metres and applies
+    a per-wheel correction when the actual wheel diameter differs from the
+    firmware's hard-coded reference.
+
+    Mid-day resets (power cut or cage clean) are detected by comparing each
+    new reading to the maximum value seen since the last midnight: if a metric
+    drops below its previous high the ESP32 was reset, so the previous maximum
+    is added to a running offset so that the daily total continues smoothly.
+
     At midnight (hour wraps from 23 → 0) the final daily reading is also
     appended to ``longtermlog.csv`` and the ESP32 counters are reset.
     """
-    global _last_poll_hour
+    global _last_poll_hour, _daily_max, _daily_offset
 
     CSV_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
@@ -264,8 +296,39 @@ def _poll_esp32():
         log.warning('Poll skipped – one or more ESP32 endpoints did not respond')
         return
 
-    ts = time.time()
-    row = f'{ts},{distance1},{distance2},{motion1count},{motion2count},{motion3count}\n'
+    # ── Mid-day reset detection ────────────────────────────────────────────────
+    # The ESP32 counters are cumulative within a day.  If any metric drops
+    # below its previously recorded maximum, the device was reset mid-day.
+    # Accumulate the previous maximum into the offset so the daily total
+    # continues from where it left off.
+    raw_vals = [distance1, distance2, motion1count, motion2count, motion3count]
+    for i, raw in enumerate(raw_vals):
+        if raw < _daily_max[i]:
+            log.info(
+                'Mid-day ESP32 reset detected on metric %d '
+                '(dropped %.2f → %.2f); accumulating offset %.2f',
+                i, _daily_max[i], raw, _daily_max[i],
+            )
+            _daily_offset[i] += _daily_max[i]
+            _daily_max[i] = 0.0
+        _daily_max[i] = max(_daily_max[i], raw)
+
+    # Effective cumulative values for today (raw + accumulated offset)
+    eff = [raw_vals[i] + _daily_offset[i] for i in range(5)]
+
+    # ── Unit conversion ────────────────────────────────────────────────────────
+    # ESP32 distances are in cm (revolution_count × circumference_cm).
+    # Convert to metres, applying a per-wheel diameter correction so that a
+    # wheel whose actual diameter differs from the firmware reference (13.5 cm)
+    # is reported correctly.
+    d1_m = _wheel_cm_to_m(eff[0], WHEEL1_DIAMETER_CM)
+    d2_m = _wheel_cm_to_m(eff[1], WHEEL2_DIAMETER_CM)
+    m1_s = eff[2]   # motion counts are already in seconds
+    m2_s = eff[3]
+    m3_s = eff[4]
+
+    ts  = time.time()
+    row = f'{ts},{d1_m},{d2_m},{m1_s},{m2_s},{m3_s}\n'
 
     if _last_poll_hour != -1 and current_hour < _last_poll_hour:
         # Midnight has just passed – persist yesterday's final values in both logs.
@@ -279,14 +342,17 @@ def _poll_esp32():
             log.info('Midnight: ESP32 counters reset for new day')
         except Exception as exc:
             log.warning('Failed to reset ESP32 at midnight: %s', exc)
+        # Reset daily tracking for the new day
+        _daily_max    = [0.0, 0.0, 0.0, 0.0, 0.0]
+        _daily_offset = [0.0, 0.0, 0.0, 0.0, 0.0]
     else:
         with open(CSV_DIR / now.strftime('%Y%m%d.csv'), 'a') as fh:
             fh.write(row)
 
     _last_poll_hour = current_hour
     log.debug(
-        'Poll OK: d1=%s d2=%s m1=%s m2=%s m3=%s',
-        distance1, distance2, motion1count, motion2count, motion3count,
+        'Poll OK: d1=%.4fm d2=%.4fm m1=%.2fs m2=%.2fs m3=%.2fs',
+        d1_m, d2_m, m1_s, m2_s, m3_s,
     )
 
 
@@ -570,12 +636,12 @@ def api_stats():
                 'wheel2Pct': round(iw2 / itw * 100, 1) if itw > 0 else 50.0,
             },
             'floorRatio': {
-                'ground':    round(im1, 2),
-                'middle':    round(im2, 2),
-                'top':       round(im3, 2),
-                'groundPct': round(im1 / itm * 100, 1) if itm > 0 else 33.3,
-                'middlePct': round(im2 / itm * 100, 1) if itm > 0 else 33.3,
-                'topPct':    round(im3 / itm * 100, 1) if itm > 0 else 33.3,
+                'basement':    round(im1, 2),
+                'mezzanine':   round(im2, 2),
+                'openSpace':   round(im3, 2),
+                'basementPct': round(im1 / itm * 100, 1) if itm > 0 else 33.3,
+                'mezzaninePct': round(im2 / itm * 100, 1) if itm > 0 else 33.3,
+                'openSpacePct': round(im3 / itm * 100, 1) if itm > 0 else 33.3,
             },
         })
 
@@ -692,12 +758,12 @@ def api_stats():
             'wheel2Pct': round(tw2 / tw * 100, 1) if tw > 0 else 50.0,
         },
         'floorRatio': {
-            'ground':    round(tm1, 2),
-            'middle':    round(tm2, 2),
-            'top':       round(tm3, 2),
-            'groundPct': round(tm1 / tm * 100, 1) if tm > 0 else 33.3,
-            'middlePct': round(tm2 / tm * 100, 1) if tm > 0 else 33.3,
-            'topPct':    round(tm3 / tm * 100, 1) if tm > 0 else 33.3,
+            'basement':    round(tm1, 2),
+            'mezzanine':   round(tm2, 2),
+            'openSpace':   round(tm3, 2),
+            'basementPct': round(tm1 / tm * 100, 1) if tm > 0 else 33.3,
+            'mezzaninePct': round(tm2 / tm * 100, 1) if tm > 0 else 33.3,
+            'openSpacePct': round(tm3 / tm * 100, 1) if tm > 0 else 33.3,
         },
     })
 
@@ -801,6 +867,37 @@ def api_heatmap():
 @app.route('/api/images')
 def api_images():
     return jsonify(load_images())
+
+
+@app.route('/api/config')
+def api_config():
+    """Return the current wheel-size configuration.
+
+    This lets clients and operators verify which wheel diameters are active
+    and compute the exact circumferences being applied to convert raw ESP32
+    distances to metres.
+
+    Response JSON:
+      wheel1DiameterCm   – configured diameter for wheel 1 (cm)
+      wheel2DiameterCm   – configured diameter for wheel 2 (cm)
+      wheel1CircumfCm    – circumference for wheel 1 (cm)
+      wheel2CircumfCm    – circumference for wheel 2 (cm)
+      wheel1CircumfM     – circumference for wheel 1 (metres)
+      wheel2CircumfM     – circumference for wheel 2 (metres)
+      esp32BaseDiameterCm – reference diameter hard-coded in ESP32 firmware (cm)
+    """
+    import math
+    w1_c = math.pi * WHEEL1_DIAMETER_CM
+    w2_c = math.pi * WHEEL2_DIAMETER_CM
+    return jsonify({
+        'wheel1DiameterCm':    WHEEL1_DIAMETER_CM,
+        'wheel2DiameterCm':    WHEEL2_DIAMETER_CM,
+        'wheel1CircumfCm':     round(w1_c, 4),
+        'wheel2CircumfCm':     round(w2_c, 4),
+        'wheel1CircumfM':      round(w1_c / 100, 6),
+        'wheel2CircumfM':      round(w2_c / 100, 6),
+        'esp32BaseDiameterCm': _ESP32_BASE_DIAM_CM,
+    })
 
 
 @app.route('/api/status')

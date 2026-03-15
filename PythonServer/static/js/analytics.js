@@ -272,12 +272,12 @@ function renderCharts({ rows, type }, stats) {
       labels,
       datasets: [
         {
-          label: 'Wheel 1 (bottom)', data: series(1),
+          label: 'Wheel 1', data: series(1),
           borderColor: '#d9600e', backgroundColor: 'rgba(217,96,14,0.12)',
           fill: true, tension: 0.3,
         },
         {
-          label: 'Wheel 2 (top)', data: series(2),
+          label: 'Wheel 2', data: series(2),
           borderColor: '#923717', backgroundColor: 'rgba(146,55,23,0.12)',
           fill: true, tension: 0.3,
         },
@@ -297,17 +297,17 @@ function renderCharts({ rows, type }, stats) {
       labels,
       datasets: [
         {
-          label: 'Ground floor', data: series(3),
+          label: 'Basement', data: series(3),
           borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.12)',
           fill: true, tension: 0.3,
         },
         {
-          label: 'Middle floor', data: series(4),
+          label: 'Mezzanine', data: series(4),
           borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.12)',
           fill: true, tension: 0.3,
         },
         {
-          label: 'Top floor', data: series(5),
+          label: 'Open-space', data: series(5),
           borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.12)',
           fill: true, tension: 0.3,
         },
@@ -482,8 +482,8 @@ function _renderLongtermStats(stats) {
       type: 'doughnut',
       data: {
         labels: [
-          `Wheel 1 (bottom) ${wr.wheel1Pct}%`,
-          `Wheel 2 (top) ${wr.wheel2Pct}%`,
+          `Wheel 1 ${wr.wheel1Pct}%`,
+          `Wheel 2 ${wr.wheel2Pct}%`,
         ],
         datasets: [{
           data: [wr.wheel1, wr.wheel2],
@@ -508,12 +508,12 @@ function _renderLongtermStats(stats) {
       type: 'doughnut',
       data: {
         labels: [
-          `Ground ${fr.groundPct}%`,
-          `Middle ${fr.middlePct}%`,
-          `Top ${fr.topPct}%`,
+          `Basement ${fr.basementPct}%`,
+          `Mezzanine ${fr.mezzaninePct}%`,
+          `Open-space ${fr.openSpacePct}%`,
         ],
         datasets: [{
-          data: [fr.ground, fr.middle, fr.top],
+          data: [fr.basement, fr.mezzanine, fr.openSpace],
           backgroundColor: [
             'rgba(239,68,68,0.8)',
             'rgba(34,197,94,0.8)',
@@ -587,8 +587,8 @@ function _renderIntradayStats(stats) {
       type: 'doughnut',
       data: {
         labels: [
-          `Wheel 1 (bottom) ${wr.wheel1Pct}%`,
-          `Wheel 2 (top) ${wr.wheel2Pct}%`,
+          `Wheel 1 ${wr.wheel1Pct}%`,
+          `Wheel 2 ${wr.wheel2Pct}%`,
         ],
         datasets: [{
           data: [wr.wheel1, wr.wheel2],
@@ -612,12 +612,12 @@ function _renderIntradayStats(stats) {
       type: 'doughnut',
       data: {
         labels: [
-          `Ground ${fr.groundPct}%`,
-          `Middle ${fr.middlePct}%`,
-          `Top ${fr.topPct}%`,
+          `Basement ${fr.basementPct}%`,
+          `Mezzanine ${fr.mezzaninePct}%`,
+          `Open-space ${fr.openSpacePct}%`,
         ],
         datasets: [{
-          data: [fr.ground, fr.middle, fr.top],
+          data: [fr.basement, fr.mezzanine, fr.openSpace],
           backgroundColor: [
             'rgba(239,68,68,0.8)',
             'rgba(34,197,94,0.8)',
@@ -636,7 +636,6 @@ function _renderIntradayStats(stats) {
     });
   }
 
-  // ── Row 4: Per-interval distance distribution ──────────────────────────────
   if (ds.min != null) {
     _setText('statMin', ds.min.toFixed(3) + ' m');
     _setText('statP25', ds.p25.toFixed(3) + ' m');
@@ -780,9 +779,9 @@ function _renderActivityBreakdown(stats) {
 
   const fr = stats.floorRatio;
   if (fr) {
-    _setText('actGround', fmtTime(fr.ground));
-    _setText('actMiddle', fmtTime(fr.middle));
-    _setText('actTop',    fmtTime(fr.top));
+    _setText('actBasement',  fmtTime(fr.basement));
+    _setText('actMezzanine', fmtTime(fr.mezzanine));
+    _setText('actOpenSpace', fmtTime(fr.openSpace));
   }
 }
 

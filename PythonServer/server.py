@@ -24,6 +24,7 @@ Configuration via environment variables:
 
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -251,8 +252,15 @@ _daily_offset = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 def _wheel_cm_to_m(raw_cm, actual_diam_cm):
-    """Convert a raw ESP32 distance (cm, based on the firmware reference
-    diameter) to metres using the wheel's actual diameter."""
+    """Convert a raw ESP32 distance (cm) to metres for the given wheel diameter.
+
+    The ESP32 firmware accumulates distance by adding ``circumference`` on each
+    revolution, where ``circumference = π × _ESP32_BASE_DIAM_CM`` (cm).  When
+    the actual wheel diameter differs from the firmware reference, the raw value
+    is proportionally corrected: ``raw_cm × (actual_diam_cm / _ESP32_BASE_DIAM_CM)``
+    scales the revolution count to the true circumference, and the final ``/ 100``
+    converts centimetres to metres.
+    """
     return raw_cm * (actual_diam_cm / _ESP32_BASE_DIAM_CM) / 100.0
 
 
@@ -314,18 +322,20 @@ def _poll_esp32():
         _daily_max[i] = max(_daily_max[i], raw)
 
     # Effective cumulative values for today (raw + accumulated offset)
-    eff = [raw_vals[i] + _daily_offset[i] for i in range(5)]
+    eff_d1, eff_d2, eff_m1, eff_m2, eff_m3 = (
+        raw_vals[i] + _daily_offset[i] for i in range(5)
+    )
 
     # ── Unit conversion ────────────────────────────────────────────────────────
     # ESP32 distances are in cm (revolution_count × circumference_cm).
     # Convert to metres, applying a per-wheel diameter correction so that a
     # wheel whose actual diameter differs from the firmware reference (13.5 cm)
     # is reported correctly.
-    d1_m = _wheel_cm_to_m(eff[0], WHEEL1_DIAMETER_CM)
-    d2_m = _wheel_cm_to_m(eff[1], WHEEL2_DIAMETER_CM)
-    m1_s = eff[2]   # motion counts are already in seconds
-    m2_s = eff[3]
-    m3_s = eff[4]
+    d1_m = _wheel_cm_to_m(eff_d1, WHEEL1_DIAMETER_CM)
+    d2_m = _wheel_cm_to_m(eff_d2, WHEEL2_DIAMETER_CM)
+    m1_s = eff_m1   # motion counts are already in seconds
+    m2_s = eff_m2
+    m3_s = eff_m3
 
     ts  = time.time()
     row = f'{ts},{d1_m},{d2_m},{m1_s},{m2_s},{m3_s}\n'
@@ -886,7 +896,6 @@ def api_config():
       wheel2CircumfM     – circumference for wheel 2 (metres)
       esp32BaseDiameterCm – reference diameter hard-coded in ESP32 firmware (cm)
     """
-    import math
     w1_c = math.pi * WHEEL1_DIAMETER_CM
     w2_c = math.pi * WHEEL2_DIAMETER_CM
     return jsonify({

@@ -11,6 +11,57 @@ let hourlyChart     = null;
 let speedChart      = null;
 let _heatmapMetric  = 'distance';
 
+// Active label set for the currently displayed dataset:
+// 'legacy' = pre-upgrade cage (old wheel/sensor names)
+// 'current' = post-upgrade cage (Big Wheel / Small Wheel, Under Cover / Open-space / Mezzanine)
+let _currentLabelSet = 'current';
+
+// ─── Label sets ───────────────────────────────────────────────────────────────
+// Pre-upgrade: original cage with one wheel and three numbered floors.
+// Post-upgrade: two different-sized wheels, three renamed sensor zones.
+const LABEL_SETS = {
+  legacy: {
+    wheel1:  'Wheel 1 (bottom)',
+    wheel2:  'Wheel 2 (top)',
+    sensor1: 'Ground floor',
+    sensor2: 'Middle floor',
+    sensor3: 'Top floor',
+  },
+  current: {
+    wheel1:  'Big Wheel',
+    wheel2:  'Small Wheel',
+    sensor1: 'Under Cover',
+    sensor2: 'Open-space',
+    sensor3: 'Mezzanine',
+  },
+};
+
+/** Return the label set for the current dataset. */
+function _getLabels() {
+  return LABEL_SETS[_currentLabelSet] || LABEL_SETS.current;
+}
+
+/**
+ * Apply the active label set to all dynamic text in the UI:
+ * summary card headings, table column headers, and activity breakdown labels.
+ */
+function _applyLabels() {
+  const L = _getLabels();
+  // Summary card wheel headings
+  _setText('sumWheel1Label', L.wheel1);
+  _setText('sumWheel2Label', L.wheel2);
+  // Data table column headers
+  _setText('thWheel1',  L.wheel1 + ' (m)');
+  _setText('thWheel2',  L.wheel2 + ' (m)');
+  _setText('thSensor1', L.sensor1 + ' (s)');
+  _setText('thSensor2', L.sensor2 + ' (s)');
+  _setText('thSensor3', L.sensor3 + ' (s)');
+  // Activity breakdown sensor labels (intraday panel)
+  _setText('actSensor1Label', L.sensor1);
+  _setText('actSensor2Label', L.sensor2);
+  _setText('actSensor3Label', L.sensor3);
+}
+
 // ─── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   // Populate the file selector with available daily CSV files.
@@ -266,18 +317,19 @@ function renderCharts({ rows, type }, stats) {
   }
 
   // Wheel distance chart
+  const L = _getLabels();
   wheelChart = new Chart(document.getElementById('wheelChart'), {
     type: 'line',
     data: {
       labels,
       datasets: [
         {
-          label: 'Wheel 1', data: series(1),
+          label: L.wheel1, data: series(1),
           borderColor: '#d9600e', backgroundColor: 'rgba(217,96,14,0.12)',
           fill: true, tension: 0.3,
         },
         {
-          label: 'Wheel 2', data: series(2),
+          label: L.wheel2, data: series(2),
           borderColor: '#923717', backgroundColor: 'rgba(146,55,23,0.12)',
           fill: true, tension: 0.3,
         },
@@ -297,17 +349,17 @@ function renderCharts({ rows, type }, stats) {
       labels,
       datasets: [
         {
-          label: 'Basement', data: series(3),
+          label: L.sensor1, data: series(3),
           borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.12)',
           fill: true, tension: 0.3,
         },
         {
-          label: 'Mezzanine', data: series(4),
+          label: L.sensor2, data: series(4),
           borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.12)',
           fill: true, tension: 0.3,
         },
         {
-          label: 'Open-space', data: series(5),
+          label: L.sensor3, data: series(5),
           borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.12)',
           fill: true, tension: 0.3,
         },
@@ -405,6 +457,9 @@ function renderStats(stats) {
 
 function _renderLongtermStats(stats) {
   _setDataTypeVisibility('longterm');
+  // Longterm always uses current labels
+  _currentLabelSet = stats.labelSet || 'current';
+  _applyLabels();
 
   // Reset Row 1 card labels for long-term context
   _setText('statMedianLabel', 'Median Daily Dist');
@@ -478,12 +533,13 @@ function _renderLongtermStats(stats) {
   // Row 3b: Wheel preference doughnut
   if (stats.wheelRatio) {
     const wr = stats.wheelRatio;
+    const L  = _getLabels();
     wheelRatioChart = new Chart(document.getElementById('wheelRatioChart'), {
       type: 'doughnut',
       data: {
         labels: [
-          `Wheel 1 ${wr.wheel1Pct}%`,
-          `Wheel 2 ${wr.wheel2Pct}%`,
+          `${L.wheel1} ${wr.wheel1Pct}%`,
+          `${L.wheel2} ${wr.wheel2Pct}%`,
         ],
         datasets: [{
           data: [wr.wheel1, wr.wheel2],
@@ -504,16 +560,17 @@ function _renderLongtermStats(stats) {
   // Row 3c: Floor distribution doughnut
   if (stats.floorRatio) {
     const fr = stats.floorRatio;
+    const L  = _getLabels();
     floorRatioChart = new Chart(document.getElementById('floorRatioChart'), {
       type: 'doughnut',
       data: {
         labels: [
-          `Basement ${fr.basementPct}%`,
-          `Mezzanine ${fr.mezzaninePct}%`,
-          `Open-space ${fr.openSpacePct}%`,
+          `${L.sensor1} ${fr.underCoverPct}%`,
+          `${L.sensor2} ${fr.openSpacePct}%`,
+          `${L.sensor3} ${fr.mezzaninePct}%`,
         ],
         datasets: [{
-          data: [fr.basement, fr.mezzanine, fr.openSpace],
+          data: [fr.underCover, fr.openSpace, fr.mezzanine],
           backgroundColor: [
             'rgba(239,68,68,0.8)',
             'rgba(34,197,94,0.8)',
@@ -555,6 +612,9 @@ function _renderLongtermStats(stats) {
 
 function _renderIntradayStats(stats) {
   _setDataTypeVisibility('intraday');
+  // Apply label set from the API response (legacy for pre-upgrade files, current otherwise)
+  _currentLabelSet = stats.labelSet || 'current';
+  _applyLabels();
 
   // ── Update Row 1 card labels for single-day context ──────────────────────
   _setText('statMedianLabel', 'Median Interval Dist');
@@ -583,12 +643,13 @@ function _renderIntradayStats(stats) {
   // ── Row 3b/c: Wheel and floor ratio doughnuts ──────────────────────────────
   if (stats.wheelRatio) {
     const wr = stats.wheelRatio;
+    const L  = _getLabels();
     wheelRatioChart = new Chart(document.getElementById('wheelRatioChart'), {
       type: 'doughnut',
       data: {
         labels: [
-          `Wheel 1 ${wr.wheel1Pct}%`,
-          `Wheel 2 ${wr.wheel2Pct}%`,
+          `${L.wheel1} ${wr.wheel1Pct}%`,
+          `${L.wheel2} ${wr.wheel2Pct}%`,
         ],
         datasets: [{
           data: [wr.wheel1, wr.wheel2],
@@ -608,16 +669,17 @@ function _renderIntradayStats(stats) {
 
   if (stats.floorRatio) {
     const fr = stats.floorRatio;
+    const L  = _getLabels();
     floorRatioChart = new Chart(document.getElementById('floorRatioChart'), {
       type: 'doughnut',
       data: {
         labels: [
-          `Basement ${fr.basementPct}%`,
-          `Mezzanine ${fr.mezzaninePct}%`,
-          `Open-space ${fr.openSpacePct}%`,
+          `${L.sensor1} ${fr.underCoverPct}%`,
+          `${L.sensor2} ${fr.openSpacePct}%`,
+          `${L.sensor3} ${fr.mezzaninePct}%`,
         ],
         datasets: [{
-          data: [fr.basement, fr.mezzanine, fr.openSpace],
+          data: [fr.underCover, fr.openSpace, fr.mezzanine],
           backgroundColor: [
             'rgba(239,68,68,0.8)',
             'rgba(34,197,94,0.8)',
@@ -779,9 +841,9 @@ function _renderActivityBreakdown(stats) {
 
   const fr = stats.floorRatio;
   if (fr) {
-    _setText('actBasement',  fmtTime(fr.basement));
-    _setText('actMezzanine', fmtTime(fr.mezzanine));
-    _setText('actOpenSpace', fmtTime(fr.openSpace));
+    _setText('actSensor1', fmtTime(fr.underCover));
+    _setText('actSensor2', fmtTime(fr.openSpace));
+    _setText('actSensor3', fmtTime(fr.mezzanine));
   }
 }
 

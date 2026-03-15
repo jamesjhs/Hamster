@@ -11,24 +11,24 @@
 <hr>
 <h2>Today</h2>
 <ul>
-  <li>Wheel 1 distance: {{ "%.2f"|format(esp32.distance1 or 0) }} m</li>
-  <li>Wheel 2 distance: {{ "%.2f"|format(esp32.distance2 or 0) }} m</li>
+  <li>Big Wheel distance: {{ "%.2f"|format(esp32.distance1 or 0) }} m</li>
+  <li>Small Wheel distance: {{ "%.2f"|format(esp32.distance2 or 0) }} m</li>
   <li><b>Total distance: {{ "%.2f"|format(today_dist) }} m ({{ today_mi }} miles)</b></li>
   <li>Max speed: {{ "%.2f"|format(esp32.maxspeed or 0) }} m/s</li>
   <li>Average speed: {{ "%.2f"|format(esp32.avespeed or 0) }} m/s</li>
-  <li>Basement active: {{ "%.1f"|format(esp32.motion1count or 0) }} s</li>
-  <li>Mezzanine active: {{ "%.1f"|format(esp32.motion2count or 0) }} s</li>
-  <li>Open-space active: {{ "%.1f"|format(esp32.motion3count or 0) }} s</li>
+  <li>Under Cover active: {{ "%.1f"|format(esp32.motion1count or 0) }} s</li>
+  <li>Open-space active: {{ "%.1f"|format(esp32.motion2count or 0) }} s</li>
+  <li>Mezzanine active: {{ "%.1f"|format(esp32.motion3count or 0) }} s</li>
   <li>Total active: {{ "%.1f"|format((esp32.motion1count or 0) + (esp32.motion2count or 0) + (esp32.motion3count or 0)) }} s</li>
 </ul>
 <h2>All Time</h2>
 <ul>
-  <li>Wheel 1 total: {{ "%.2f"|format(lt_summary.totalWheel1 + (esp32.distance1 or 0)) }} m</li>
-  <li>Wheel 2 total: {{ "%.2f"|format(lt_summary.totalWheel2 + (esp32.distance2 or 0)) }} m</li>
+  <li>Big Wheel total: {{ "%.2f"|format(lt_summary.totalWheel1 + (esp32.distance1 or 0)) }} m</li>
+  <li>Small Wheel total: {{ "%.2f"|format(lt_summary.totalWheel2 + (esp32.distance2 or 0)) }} m</li>
   <li><b>Total distance: {{ "%.2f"|format(total_dist) }} m ({{ total_mi }} miles)</b></li>
-  <li>Basement total: {{ "%.1f"|format(lt_summary.totalMotion1 + (esp32.motion1count or 0)) }} s</li>
-  <li>Mezzanine total: {{ "%.1f"|format(lt_summary.totalMotion2 + (esp32.motion2count or 0)) }} s</li>
-  <li>Open-space total: {{ "%.1f"|format(lt_summary.totalMotion3 + (esp32.motion3count or 0)) }} s</li>
+  <li>Under Cover total: {{ "%.1f"|format(lt_summary.totalMotion1 + (esp32.motion1count or 0)) }} s</li>
+  <li>Open-space total: {{ "%.1f"|format(lt_summary.totalMotion2 + (esp32.motion2count or 0)) }} s</li>
+  <li>Mezzanine total: {{ "%.1f"|format(lt_summary.totalMotion3 + (esp32.motion3count or 0)) }} s</li>
 </ul>
 <h2>Status</h2>
 <ul>

@@ -74,11 +74,11 @@
     <h2 class="text-lg font-bold text-hamster-800 mb-4">Today's Activity</h2>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 text-sm">
       <div>
-        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Wheel 1</p>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Big Wheel</p>
         <p class="text-xl font-bold">{{ "%.2f"|format(esp32.distance1 or 0) }} m</p>
       </div>
       <div>
-        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Wheel 2</p>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Small Wheel</p>
         <p class="text-xl font-bold">{{ "%.2f"|format(esp32.distance2 or 0) }} m</p>
       </div>
       <div>
@@ -86,15 +86,15 @@
         <p class="text-xl font-bold">{{ "%.2f"|format(esp32.maxspeed or 0) }} m/s</p>
       </div>
       <div>
-        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Basement</p>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Under Cover</p>
         <p class="text-xl font-bold">{{ "%.1f"|format(esp32.motion1count or 0) }} s</p>
       </div>
       <div>
-        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Mezzanine</p>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Open-space</p>
         <p class="text-xl font-bold">{{ "%.1f"|format(esp32.motion2count or 0) }} s</p>
       </div>
       <div>
-        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Open-space</p>
+        <p class="text-hamster-500 font-semibold text-xs uppercase tracking-wide">Mezzanine</p>
         <p class="text-xl font-bold">{{ "%.1f"|format(esp32.motion3count or 0) }} s</p>
       </div>
     </div>

@@ -45,12 +45,18 @@ BIRTH_DATE = datetime(2025, 9, 7, tzinfo=timezone.utc)
 
 # Wheel diameter configuration (cm).  Set WHEEL1_DIAMETER_CM / WHEEL2_DIAMETER_CM
 # environment variables when the physical wheels differ from the ESP32 firmware's
-# reference diameter (13.5 cm).  The poller uses these to convert the cm distances
-# reported by the ESP32 into metres and to apply a per-wheel correction when the
-# actual diameter differs from the firmware reference.
-_ESP32_BASE_DIAM_CM  = 13.5  # diameter (cm) hard-coded in the ESP32 firmware
-WHEEL1_DIAMETER_CM   = float(os.environ.get('WHEEL1_DIAMETER_CM', _ESP32_BASE_DIAM_CM))
-WHEEL2_DIAMETER_CM   = float(os.environ.get('WHEEL2_DIAMETER_CM', _ESP32_BASE_DIAM_CM))
+# reference diameter (13.5 cm).  Defaults reflect the new cage fitted on
+# CAGE_UPGRADE_DATE: Wheel 1 is the big wheel (30 cm), Wheel 2 the small wheel
+# (14 cm).  The poller applies a proportional correction to the metres reported
+# by the ESP32, which always computes distance based on the 13.5 cm reference.
+_ESP32_BASE_DIAM_CM  = 13.5   # diameter (cm) hard-coded in the ESP32 firmware
+WHEEL1_DIAMETER_CM   = float(os.environ.get('WHEEL1_DIAMETER_CM', 30.0))
+WHEEL2_DIAMETER_CM   = float(os.environ.get('WHEEL2_DIAMETER_CM', 14.0))
+
+# Date (YYYY-MM-DD) from which the new cage configuration (two different-sized
+# wheels, renamed sensor positions) took effect.  Data before this date is
+# labelled with the original cage terminology in the UI.
+CAGE_UPGRADE_DATE = os.environ.get('CAGE_UPGRADE_DATE', '2026-03-15')
 
 # ─── App ───────────────────────────────────────────────────────────────────────
 
@@ -127,13 +133,13 @@ def get_esp32_data():
     elif raw.get('lastwheelmillis') == 0 and raw.get('lastmotionmillis') == 0:
         raw['lastLocation'] = 'unknown'
     elif raw.get('lastmotionmillis', 0) < raw.get('lastwheelmillis', float('inf')):
-        levels = {1: 'basement', 2: 'mezzanine', 3: 'open-space'}
+        levels = {1: 'under cover', 2: 'open-space', 3: 'mezzanine'}
         raw['lastLocation'] = levels.get(
             round(raw.get('motionLevelLast', 0)), 'unknown level'
         )
     else:
         wheel_num = round(raw.get('wheelNumberLast', 1))
-        raw['lastLocation'] = 'wheel 1' if wheel_num == 1 else 'wheel 2'
+        raw['lastLocation'] = 'big wheel' if wheel_num == 1 else 'small wheel'
 
     # Age calculation using a polynomial hamster-year conversion.
     now_dt = datetime.now(timezone.utc)
@@ -251,17 +257,19 @@ _daily_max    = [0.0, 0.0, 0.0, 0.0, 0.0]
 _daily_offset = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 
-def _wheel_cm_to_m(raw_cm, actual_diam_cm):
-    """Convert a raw ESP32 distance (cm) to metres for the given wheel diameter.
+def _correct_wheel_distance(raw_m, actual_diam_cm):
+    """Scale an ESP32 wheel distance (metres) to account for a different wheel diameter.
 
-    The ESP32 firmware accumulates distance by adding ``circumference`` on each
-    revolution, where ``circumference = π × _ESP32_BASE_DIAM_CM`` (cm).  When
-    the actual wheel diameter differs from the firmware reference, the raw value
-    is proportionally corrected: ``raw_cm × (actual_diam_cm / _ESP32_BASE_DIAM_CM)``
-    scales the revolution count to the true circumference, and the final ``/ 100``
-    converts centimetres to metres.
+    The ESP32 firmware computes distance by multiplying revolution count by a
+    circumference calculated from the hard-coded reference diameter
+    (``_ESP32_BASE_DIAM_CM`` = 13.5 cm).  When the physical wheel is larger or
+    smaller, the reported metres are proportionally wrong.  This function
+    corrects by scaling: ``raw_m × (actual_diam_cm / _ESP32_BASE_DIAM_CM)``.
+
+    Example: big wheel (30 cm) → correction factor 30 / 13.5 ≈ 2.22,
+    so 100 m reported by the ESP32 becomes 222 m of true distance.
     """
-    return raw_cm * (actual_diam_cm / _ESP32_BASE_DIAM_CM) / 100.0
+    return raw_m * (actual_diam_cm / _ESP32_BASE_DIAM_CM)
 
 
 def _poll_esp32():
@@ -326,13 +334,12 @@ def _poll_esp32():
         raw_vals[i] + _daily_offset[i] for i in range(5)
     )
 
-    # ── Unit conversion ────────────────────────────────────────────────────────
-    # ESP32 distances are in cm (revolution_count × circumference_cm).
-    # Convert to metres, applying a per-wheel diameter correction so that a
-    # wheel whose actual diameter differs from the firmware reference (13.5 cm)
-    # is reported correctly.
-    d1_m = _wheel_cm_to_m(eff_d1, WHEEL1_DIAMETER_CM)
-    d2_m = _wheel_cm_to_m(eff_d2, WHEEL2_DIAMETER_CM)
+    # ── Diameter correction ────────────────────────────────────────────────────
+    # The ESP32 reports distances in metres, computed using its hard-coded 13.5 cm
+    # reference diameter.  Apply a proportional correction for each wheel's
+    # actual diameter.  Motion counts are already in seconds; no conversion needed.
+    d1_m = _correct_wheel_distance(eff_d1, WHEEL1_DIAMETER_CM)
+    d2_m = _correct_wheel_distance(eff_d2, WHEEL2_DIAMETER_CM)
     m1_s = eff_m1   # motion counts are already in seconds
     m2_s = eff_m2
     m3_s = eff_m3
@@ -623,9 +630,14 @@ def api_stats():
         itw = iw1 + iw2
         itm = im1 + im2 + im3
 
+        # Determine label set: files before the cage upgrade use legacy terminology.
+        file_date_str = file_param[:8]  # YYYYMMDD from filename
+        label_set = 'legacy' if file_date_str < CAGE_UPGRADE_DATE.replace('-', '') else 'current'
+
         return jsonify({
             'type':           'intraday',
             'n':              len(deltas_dist),
+            'labelSet':       label_set,
             'distanceStats':  _stats(deltas_dist),
             'motionStats':    _stats(deltas_motion),
             'peakDistHour':   peak_dist_h,
@@ -646,12 +658,12 @@ def api_stats():
                 'wheel2Pct': round(iw2 / itw * 100, 1) if itw > 0 else 50.0,
             },
             'floorRatio': {
-                'basement':    round(im1, 2),
-                'mezzanine':   round(im2, 2),
-                'openSpace':   round(im3, 2),
-                'basementPct': round(im1 / itm * 100, 1) if itm > 0 else 33.3,
-                'mezzaninePct': round(im2 / itm * 100, 1) if itm > 0 else 33.3,
-                'openSpacePct': round(im3 / itm * 100, 1) if itm > 0 else 33.3,
+                'underCover':    round(im1, 2),
+                'openSpace':     round(im2, 2),
+                'mezzanine':     round(im3, 2),
+                'underCoverPct': round(im1 / itm * 100, 1) if itm > 0 else 33.3,
+                'openSpacePct':  round(im2 / itm * 100, 1) if itm > 0 else 33.3,
+                'mezzaninePct':  round(im3 / itm * 100, 1) if itm > 0 else 33.3,
             },
         })
 
@@ -732,6 +744,7 @@ def api_stats():
     return jsonify({
         'type':        'longterm',
         'n':           n,
+        'labelSet':    'current',
         'activeDays':  sum(1 for v in total_dist if v > 0),
         'distanceStats': _stats(total_dist),
         'motionStats':   _stats(total_mot),
@@ -768,12 +781,12 @@ def api_stats():
             'wheel2Pct': round(tw2 / tw * 100, 1) if tw > 0 else 50.0,
         },
         'floorRatio': {
-            'basement':    round(tm1, 2),
-            'mezzanine':   round(tm2, 2),
-            'openSpace':   round(tm3, 2),
-            'basementPct': round(tm1 / tm * 100, 1) if tm > 0 else 33.3,
-            'mezzaninePct': round(tm2 / tm * 100, 1) if tm > 0 else 33.3,
-            'openSpacePct': round(tm3 / tm * 100, 1) if tm > 0 else 33.3,
+            'underCover':    round(tm1, 2),
+            'openSpace':     round(tm2, 2),
+            'mezzanine':     round(tm3, 2),
+            'underCoverPct': round(tm1 / tm * 100, 1) if tm > 0 else 33.3,
+            'openSpacePct':  round(tm2 / tm * 100, 1) if tm > 0 else 33.3,
+            'mezzaninePct':  round(tm3 / tm * 100, 1) if tm > 0 else 33.3,
         },
     })
 
@@ -881,31 +894,29 @@ def api_images():
 
 @app.route('/api/config')
 def api_config():
-    """Return the current wheel-size configuration.
+    """Return the current wheel-size and cage configuration.
 
-    This lets clients and operators verify which wheel diameters are active
-    and compute the exact circumferences being applied to convert raw ESP32
-    distances to metres.
+    This lets clients verify which wheel diameters are active and which date
+    marks the boundary between legacy (old cage) and current labelling.
 
     Response JSON:
-      wheel1DiameterCm   – configured diameter for wheel 1 (cm)
-      wheel2DiameterCm   – configured diameter for wheel 2 (cm)
-      wheel1CircumfCm    – circumference for wheel 1 (cm)
-      wheel2CircumfCm    – circumference for wheel 2 (cm)
-      wheel1CircumfM     – circumference for wheel 1 (metres)
-      wheel2CircumfM     – circumference for wheel 2 (metres)
+      wheel1DiameterCm    – configured diameter for wheel 1 / big wheel (cm)
+      wheel2DiameterCm    – configured diameter for wheel 2 / small wheel (cm)
+      wheel1CircumfM      – circumference for wheel 1 (metres)
+      wheel2CircumfM      – circumference for wheel 2 (metres)
       esp32BaseDiameterCm – reference diameter hard-coded in ESP32 firmware (cm)
+      upgradeDate         – YYYY-MM-DD from which the new cage config applies;
+                            analytics data before this date uses legacy labels
     """
     w1_c = math.pi * WHEEL1_DIAMETER_CM
     w2_c = math.pi * WHEEL2_DIAMETER_CM
     return jsonify({
         'wheel1DiameterCm':    WHEEL1_DIAMETER_CM,
         'wheel2DiameterCm':    WHEEL2_DIAMETER_CM,
-        'wheel1CircumfCm':     round(w1_c, 4),
-        'wheel2CircumfCm':     round(w2_c, 4),
         'wheel1CircumfM':      round(w1_c / 100, 6),
         'wheel2CircumfM':      round(w2_c / 100, 6),
         'esp32BaseDiameterCm': _ESP32_BASE_DIAM_CM,
+        'upgradeDate':         CAGE_UPGRADE_DATE,
     })
 
 

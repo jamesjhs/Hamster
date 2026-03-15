@@ -77,11 +77,11 @@
       <p class="text-2xl font-bold text-hamster-800" id="sumTotalDist">—</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
-      <p class="text-xs text-hamster-500 uppercase font-semibold">Wheel 1</p>
+      <p class="text-xs text-hamster-500 uppercase font-semibold" id="sumWheel1Label">Big Wheel</p>
       <p class="text-2xl font-bold text-hamster-800" id="sumWheel1">—</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
-      <p class="text-xs text-hamster-500 uppercase font-semibold">Wheel 2</p>
+      <p class="text-xs text-hamster-500 uppercase font-semibold" id="sumWheel2Label">Small Wheel</p>
       <p class="text-2xl font-bold text-hamster-800" id="sumWheel2">—</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-4 text-center">
@@ -227,16 +227,16 @@
           <p class="text-xs text-hamster-400 mt-1">running intervals</p>
         </div>
         <div class="bg-hamster-50 rounded-lg p-3 text-center">
-          <p class="text-xs text-hamster-500 uppercase font-semibold">Basement</p>
-          <p class="text-xl font-bold text-hamster-800" id="actBasement">—</p>
+          <p class="text-xs text-hamster-500 uppercase font-semibold" id="actSensor1Label">Under Cover</p>
+          <p class="text-xl font-bold text-hamster-800" id="actSensor1">—</p>
         </div>
         <div class="bg-hamster-50 rounded-lg p-3 text-center">
-          <p class="text-xs text-hamster-500 uppercase font-semibold">Mezzanine</p>
-          <p class="text-xl font-bold text-hamster-800" id="actMezzanine">—</p>
+          <p class="text-xs text-hamster-500 uppercase font-semibold" id="actSensor2Label">Open-space</p>
+          <p class="text-xl font-bold text-hamster-800" id="actSensor2">—</p>
         </div>
         <div class="bg-hamster-50 rounded-lg p-3 text-center">
-          <p class="text-xs text-hamster-500 uppercase font-semibold">Open-space</p>
-          <p class="text-xl font-bold text-hamster-800" id="actOpenSpace">—</p>
+          <p class="text-xs text-hamster-500 uppercase font-semibold" id="actSensor3Label">Mezzanine</p>
+          <p class="text-xl font-bold text-hamster-800" id="actSensor3">—</p>
         </div>
       </div>
     </div>
@@ -295,12 +295,12 @@
         <thead>
           <tr class="bg-hamster-100 text-hamster-700 text-left">
             <th class="px-2 py-1.5">Date / Time</th>
-            <th class="px-2 py-1.5 text-right">Wheel 1 (m)</th>
-            <th class="px-2 py-1.5 text-right">Wheel 2 (m)</th>
+            <th class="px-2 py-1.5 text-right" id="thWheel1">Big Wheel (m)</th>
+            <th class="px-2 py-1.5 text-right" id="thWheel2">Small Wheel (m)</th>
             <th class="px-2 py-1.5 text-right">Total Dist (m)</th>
-            <th class="px-2 py-1.5 text-right">Basement (s)</th>
-            <th class="px-2 py-1.5 text-right">Mezzanine (s)</th>
-            <th class="px-2 py-1.5 text-right">Open-space (s)</th>
+            <th class="px-2 py-1.5 text-right" id="thSensor1">Under Cover (s)</th>
+            <th class="px-2 py-1.5 text-right" id="thSensor2">Open-space (s)</th>
+            <th class="px-2 py-1.5 text-right" id="thSensor3">Mezzanine (s)</th>
             <th class="px-2 py-1.5 text-right">Total Active (s)</th>
           </tr>
         </thead>
@@ -310,5 +310,5 @@
   </div>
 
   <script src="/static/js/chart.umd.min.js"></script>
-  <script src="/static/js/analytics.js?v=5"></script>
+  <script src="/static/js/analytics.js?v=6"></script>
 {% endblock %}

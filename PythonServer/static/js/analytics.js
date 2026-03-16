@@ -382,13 +382,28 @@ function renderSummary({ rows, type }) {
    * Compute the total for a column over the range.
    *
    * Long-term: sum all rows (each row is a daily total).
-   * Intraday:  last value − first value (cumulative counters).
+   * Intraday:  sum positive increments between consecutive rows, and when
+   *            a drop is detected (ESP32/Pi reboot mid-day) add the
+   *            post-drop value in full — mirroring sum_daily_csv() in
+   *            server.py so that today's distances survive a power outage
+   *            or system reset.
    */
   function total(col) {
     if (isLongterm) {
       return rows.reduce((acc, r) => acc + (r[col] || 0), 0);
     }
-    return Math.max(0, (rows[rows.length - 1]?.[col] || 0) - (rows[0]?.[col] || 0));
+    let acc = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const delta = (rows[i][col] || 0) - (rows[i - 1][col] || 0);
+      if (delta > 0) {
+        acc += delta;
+      } else if (delta < 0) {
+        // Reset detected: ESP32 restarted and started counting from zero.
+        // Add the post-reset cumulative value in full.
+        acc += Math.max(0, rows[i][col] || 0);
+      }
+    }
+    return acc;
   }
 
   const w1 = total(1), w2 = total(2);
@@ -403,9 +418,13 @@ function renderSummary({ rows, type }) {
   if (!isLongterm && rows.length > 1) {
     let wheelTimeSec = 0;
     for (let i = 1; i < rows.length; i++) {
-      const dw1 = Math.max(0, (rows[i][1] || 0) - (rows[i - 1][1] || 0));
-      const dw2 = Math.max(0, (rows[i][2] || 0) - (rows[i - 1][2] || 0));
-      if (dw1 + dw2 > 0) {
+      const dw1 = (rows[i][1] || 0) - (rows[i - 1][1] || 0);
+      const dw2 = (rows[i][2] || 0) - (rows[i - 1][2] || 0);
+      // Count the interval if either wheel moved forward, or if a reset
+      // occurred but the post-reset value is non-zero (hamster was running).
+      const w1active = dw1 > 0 || (dw1 < 0 && (rows[i][1] || 0) > 0);
+      const w2active = dw2 > 0 || (dw2 < 0 && (rows[i][2] || 0) > 0);
+      if (w1active || w2active) {
         wheelTimeSec += rows[i][0] - rows[i - 1][0];
       }
     }

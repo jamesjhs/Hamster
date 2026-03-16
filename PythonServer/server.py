@@ -218,6 +218,42 @@ def get_longterm_summary():
     return summary
 
 
+def sum_daily_csv(rows):
+    """Compute per-metric daily totals from intraday CSV rows, correctly
+    handling mid-day dips caused by a Pi or ESP32 reboot.
+
+    Each row stores the *cumulative* total reported by the ESP32 (with any
+    in-memory offset applied at log time).  A combined Pi+ESP32 reboot
+    mid-day creates a dip: values fall then restart from a lower value.
+    Simply computing ``last – first`` returns a near-zero (or zero, via
+    ``max(0, …)``) result in that situation.
+
+    This function instead sums the positive increment between every pair of
+    consecutive rows, and, when a drop is detected, also adds the post-drop
+    value in full (since the ESP32 started counting from zero after the
+    reset and had already accumulated that amount by the time of the first
+    new poll after the restart).
+
+    Returns five floats: [wheel1, wheel2, motion1, motion2, motion3].
+    """
+    if len(rows) < 2:
+        return [0.0, 0.0, 0.0, 0.0, 0.0]
+    totals = [0.0] * 5
+    prev = rows[0]
+    for curr in rows[1:]:
+        for i in range(5):
+            delta = (curr[i + 1] or 0.0) - (prev[i + 1] or 0.0)
+            if delta > 0:
+                totals[i] += delta
+            elif delta < 0:
+                # Drop detected: the ESP32 (or Pi) restarted.  The current
+                # value is the total accumulated since that restart; count
+                # it in full rather than treating the drop as zero.
+                totals[i] += max(0.0, curr[i + 1] or 0.0)
+        prev = curr
+    return totals
+
+
 def load_images():
     """Load gallery image metadata from ``images.json`` next to this file."""
     try:
@@ -440,15 +476,15 @@ def kindle():
     # Read today's intraday CSV for persistent distance/motion totals.
     # Unlike the ESP32's in-memory counters, the CSV survives a power loss or
     # reboot, so the "Today" figures remain accurate after an ESP32 reset.
+    # sum_daily_csv() correctly handles mid-day dips caused by a combined
+    # Pi+ESP32 reboot, where a simple last–first subtraction would give zero
+    # or an under-count.
     today_str = datetime.now().strftime('%Y%m%d')
     csv_rows = read_csv(CSV_DIR / f'{today_str}.csv')
     if csv_rows:
-        first, last = csv_rows[0], csv_rows[-1]
-        today_wheel1  = max(0.0, last[1] - first[1])
-        today_wheel2  = max(0.0, last[2] - first[2])
-        today_motion1 = max(0.0, last[3] - first[3])
-        today_motion2 = max(0.0, last[4] - first[4])
-        today_motion3 = max(0.0, last[5] - first[5])
+        today_wheel1, today_wheel2, today_motion1, today_motion2, today_motion3 = (
+            sum_daily_csv(csv_rows)
+        )
     else:
         # Before the first CSV poll of the day, fall back to live ESP32 values.
         today_wheel1  = esp32.get('distance1', 0.0)
@@ -668,14 +704,9 @@ def api_stats():
             _linreg(speeds_kmh) if len(speeds_kmh) >= 2 else (0.0, 0.0, 0.0)
         )
 
-        # Wheel and floor ratios for the day
-        first_row = rows[0]
-        last_row  = rows[-1]
-        iw1 = max(0.0, (last_row[1] if len(last_row) > 1 else 0) - (first_row[1] if len(first_row) > 1 else 0))
-        iw2 = max(0.0, (last_row[2] if len(last_row) > 2 else 0) - (first_row[2] if len(first_row) > 2 else 0))
-        im1 = max(0.0, (last_row[3] if len(last_row) > 3 else 0) - (first_row[3] if len(first_row) > 3 else 0))
-        im2 = max(0.0, (last_row[4] if len(last_row) > 4 else 0) - (first_row[4] if len(first_row) > 4 else 0))
-        im3 = max(0.0, (last_row[5] if len(last_row) > 5 else 0) - (first_row[5] if len(first_row) > 5 else 0))
+        # Wheel and floor ratios for the day – use sum_daily_csv() so that a
+        # mid-day dip caused by a Pi/ESP32 reboot does not zero-out the ratios.
+        iw1, iw2, im1, im2, im3 = sum_daily_csv(rows)
         itw = iw1 + iw2
         itm = im1 + im2 + im3
 

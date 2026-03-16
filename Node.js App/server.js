@@ -179,6 +179,43 @@ function getLongtermSummary() {
   return { totalWheel1, totalWheel2, totalMotion1, totalMotion2, totalMotion3 };
 }
 
+/**
+ * Compute per-metric daily totals from intraday CSV rows, correctly handling
+ * mid-day dips caused by a Pi or ESP32 reboot.
+ *
+ * Each row stores the cumulative total reported by the ESP32 (with any
+ * in-memory offset applied at log time).  A combined Pi+ESP32 reboot mid-day
+ * creates a dip: values fall then restart from a lower value.  Simply using
+ * last–first returns near-zero (or zero) in that situation.
+ *
+ * This function instead sums the positive increment between every pair of
+ * consecutive rows, and, when a drop is detected, also adds the post-drop
+ * value in full (since the ESP32 restarted from zero and had already
+ * accumulated that amount by the time of the first new poll after the restart).
+ *
+ * Returns [wheel1, wheel2, motion1, motion2, motion3].
+ */
+function sumDailyCSV(rows) {
+  if (rows.length < 2) return [0, 0, 0, 0, 0];
+  const totals = [0, 0, 0, 0, 0];
+  let prev = rows[0];
+  for (let r = 1; r < rows.length; r++) {
+    const curr = rows[r];
+    for (let i = 0; i < 5; i++) {
+      const delta = (curr[i + 1] || 0) - (prev[i + 1] || 0);
+      if (delta > 0) {
+        totals[i] += delta;
+      } else if (delta < 0) {
+        // Drop detected: ESP32 (or Pi) restarted.  The current value is the
+        // total accumulated since that restart; count it in full.
+        totals[i] += Math.max(0, curr[i + 1] || 0);
+      }
+    }
+    prev = curr;
+  }
+  return totals;
+}
+
 // ─── Gallery helper ───────────────────────────────────────────────────────────
 function loadImages() {
   try {
@@ -237,7 +274,26 @@ app.get('/kindle', async (_req, res) => {
     getESP32Data().catch(() => ({})),
     Promise.resolve(getLongtermSummary()),
   ]);
-  res.send(renderKindle({ esp32, ltSummary }));
+
+  // Read today's intraday CSV for persistent distance/motion totals.
+  // sumDailyCSV() correctly handles mid-day dips caused by a combined
+  // Pi+ESP32 reboot, where a simple last–first subtraction (or using raw
+  // ESP32 values) would give zero or an under-count.
+  const todayStr  = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/London' }).replace(/-/g, '');
+  const todayRows = readCSV(path.join(CSV_DIR, `${todayStr}.csv`));
+  let todayWheel1, todayWheel2, todayMotion1, todayMotion2, todayMotion3;
+  if (todayRows.length >= 2) {
+    [todayWheel1, todayWheel2, todayMotion1, todayMotion2, todayMotion3] = sumDailyCSV(todayRows);
+  } else {
+    // Before the first CSV poll of the day, fall back to live ESP32 values.
+    todayWheel1  = esp32.distance1    || 0;
+    todayWheel2  = esp32.distance2    || 0;
+    todayMotion1 = esp32.motion1count || 0;
+    todayMotion2 = esp32.motion2count || 0;
+    todayMotion3 = esp32.motion3count || 0;
+  }
+
+  res.send(renderKindle({ esp32, ltSummary, todayWheel1, todayWheel2, todayMotion1, todayMotion2, todayMotion3 }));
 });
 
 // API – live ESP32 data
@@ -1087,13 +1143,13 @@ function renderLiveStatus() {
   `);
 }
 
-function renderKindle({ esp32, ltSummary }) {
-  const nowStr      = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
-  const todayDist   = ((esp32.distance1 || 0) + (esp32.distance2 || 0));
-  const totalDist   = ltSummary.totalWheel1 + ltSummary.totalWheel2 + todayDist;
-  const todayMi     = (todayDist  * 0.000621371).toFixed(3);
-  const totalMi     = (totalDist  * 0.000621371).toFixed(3);
-  const lastTime    = new Date(esp32.lastActiveTs || Date.now())
+function renderKindle({ esp32, ltSummary, todayWheel1, todayWheel2, todayMotion1, todayMotion2, todayMotion3 }) {
+  const nowStr    = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
+  const todayDist = todayWheel1 + todayWheel2;
+  const totalDist = ltSummary.totalWheel1 + ltSummary.totalWheel2 + todayDist;
+  const todayMi   = (todayDist  * 0.000621371).toFixed(3);
+  const totalMi   = (totalDist  * 0.000621371).toFixed(3);
+  const lastTime  = new Date(esp32.lastActiveTs || Date.now())
     .toLocaleTimeString('en-GB', { timeZone: 'Europe/London' });
 
   // Pure HTML — no JavaScript, no external resources
@@ -1110,24 +1166,24 @@ function renderKindle({ esp32, ltSummary }) {
 <hr>
 <h2>Today</h2>
 <ul>
-  <li>Wheel 1 (bottom) distance: ${(esp32.distance1 || 0).toFixed(2)} m</li>
-  <li>Wheel 2 (top) distance: ${(esp32.distance2 || 0).toFixed(2)} m</li>
+  <li>Wheel 1 (bottom) distance: ${todayWheel1.toFixed(2)} m</li>
+  <li>Wheel 2 (top) distance: ${todayWheel2.toFixed(2)} m</li>
   <li><b>Total distance: ${todayDist.toFixed(2)} m (${todayMi} miles)</b></li>
   <li>Max speed: ${(esp32.maxspeed || 0).toFixed(2)} m/s</li>
   <li>Average speed: ${(esp32.avespeed || 0).toFixed(2)} m/s</li>
-  <li>Ground floor active: ${(esp32.motion1count || 0).toFixed(1)} s</li>
-  <li>Middle floor active: ${(esp32.motion2count || 0).toFixed(1)} s</li>
-  <li>Top floor active: ${(esp32.motion3count || 0).toFixed(1)} s</li>
-  <li>Total active: ${((esp32.motion1count||0)+(esp32.motion2count||0)+(esp32.motion3count||0)).toFixed(1)} s</li>
+  <li>Ground floor active: ${todayMotion1.toFixed(1)} s</li>
+  <li>Middle floor active: ${todayMotion2.toFixed(1)} s</li>
+  <li>Top floor active: ${todayMotion3.toFixed(1)} s</li>
+  <li>Total active: ${(todayMotion1 + todayMotion2 + todayMotion3).toFixed(1)} s</li>
 </ul>
 <h2>All Time</h2>
 <ul>
-  <li>Wheel 1 total: ${(ltSummary.totalWheel1 + (esp32.distance1||0)).toFixed(2)} m</li>
-  <li>Wheel 2 total: ${(ltSummary.totalWheel2 + (esp32.distance2||0)).toFixed(2)} m</li>
+  <li>Wheel 1 total: ${(ltSummary.totalWheel1 + todayWheel1).toFixed(2)} m</li>
+  <li>Wheel 2 total: ${(ltSummary.totalWheel2 + todayWheel2).toFixed(2)} m</li>
   <li><b>Total distance: ${totalDist.toFixed(2)} m (${totalMi} miles)</b></li>
-  <li>Ground floor total: ${(ltSummary.totalMotion1 + (esp32.motion1count||0)).toFixed(1)} s</li>
-  <li>Middle floor total: ${(ltSummary.totalMotion2 + (esp32.motion2count||0)).toFixed(1)} s</li>
-  <li>Top floor total: ${(ltSummary.totalMotion3 + (esp32.motion3count||0)).toFixed(1)} s</li>
+  <li>Ground floor total: ${(ltSummary.totalMotion1 + todayMotion1).toFixed(1)} s</li>
+  <li>Middle floor total: ${(ltSummary.totalMotion2 + todayMotion2).toFixed(1)} s</li>
+  <li>Top floor total: ${(ltSummary.totalMotion3 + todayMotion3).toFixed(1)} s</li>
 </ul>
 <h2>Status</h2>
 <ul>

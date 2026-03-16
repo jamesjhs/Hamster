@@ -87,8 +87,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadData();
   });
 
-  // Default view: last 30 days on the long-term log. setPreset calls loadData().
-  setPreset(30);
+  // Default view: today's intraday data. setPreset calls loadData().
+  setPreset(1);
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

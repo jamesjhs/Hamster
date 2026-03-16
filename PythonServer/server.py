@@ -436,13 +436,39 @@ def blog():
 def kindle():
     esp32 = get_esp32_data()
     lt = get_longterm_summary()
-    today_dist = esp32.get('distance1', 0) + esp32.get('distance2', 0)
+
+    # Read today's intraday CSV for persistent distance/motion totals.
+    # Unlike the ESP32's in-memory counters, the CSV survives a power loss or
+    # reboot, so the "Today" figures remain accurate after an ESP32 reset.
+    today_str = datetime.now().strftime('%Y%m%d')
+    csv_rows = read_csv(CSV_DIR / f'{today_str}.csv')
+    if csv_rows:
+        first, last = csv_rows[0], csv_rows[-1]
+        today_wheel1  = max(0.0, last[1] - first[1])
+        today_wheel2  = max(0.0, last[2] - first[2])
+        today_motion1 = max(0.0, last[3] - first[3])
+        today_motion2 = max(0.0, last[4] - first[4])
+        today_motion3 = max(0.0, last[5] - first[5])
+    else:
+        # Before the first CSV poll of the day, fall back to live ESP32 values.
+        today_wheel1  = esp32.get('distance1', 0.0)
+        today_wheel2  = esp32.get('distance2', 0.0)
+        today_motion1 = esp32.get('motion1count', 0.0)
+        today_motion2 = esp32.get('motion2count', 0.0)
+        today_motion3 = esp32.get('motion3count', 0.0)
+
+    today_dist = today_wheel1 + today_wheel2
     total_dist = lt['totalWheel1'] + lt['totalWheel2'] + today_dist
     last_ts = esp32.get('lastActiveTs', time.time() * 1000) / 1000
     return render_template(
         'kindle.html',
         esp32=esp32,
         lt_summary=lt,
+        today_wheel1=today_wheel1,
+        today_wheel2=today_wheel2,
+        today_motion1=today_motion1,
+        today_motion2=today_motion2,
+        today_motion3=today_motion3,
         today_dist=today_dist,
         total_dist=total_dist,
         today_mi=f'{today_dist * 0.000621371:.3f}',

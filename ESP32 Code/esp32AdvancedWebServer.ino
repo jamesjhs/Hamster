@@ -31,8 +31,10 @@ int wheel2triggered = 0;
 int wheel2count = 0;
 unsigned long wheel2last;
 
-float wheelDia = 13.5;                          // wheel diameter (cm)
-float wheelCircumf = (3.142 * wheelDia) / 100;  // wheel circumference (m)
+float wheelDia1 = 30.0;                          // big wheel diameter (cm)
+float wheelDia2 = 14.0;                          // small wheel diameter (cm)
+float wheelCircumf1 = (PI * wheelDia1) / 100;   // big wheel circumference (m)
+float wheelCircumf2 = (PI * wheelDia2) / 100;   // small wheel circumference (m)
 unsigned long timePause = 10000;                // time considered a break between runs in msec (so the average speed display and timeElapsed work properly)
 unsigned long timeElapsed;
 
@@ -310,10 +312,10 @@ void loop(void) {
       }
 
       if (millis() - lastwheelmillis < timePause) {  // displays the speed again so long as a long break hasn't occurred
-        currentspeed = 1000 * wheelCircumf / (millis() - lastwheelmillis);
+        currentspeed = 1000 * wheelCircumf1 / (millis() - lastwheelmillis);
       }
 
-      distance1 = distance1 + wheelCircumf;  // distance travelled in metres
+      distance1 = distance1 + wheelCircumf1;  // distance travelled in metres
       distance = distance1 + distance2;
       avespeed = distance / (timeElapsed / 1000.0);
 
@@ -349,10 +351,10 @@ void loop(void) {
       }
 
       if (millis() - lastwheelmillis < timePause) {  // displays the speed again so long as a long break hasn't occurred
-        currentspeed = 1000 * wheelCircumf / (millis() - lastwheelmillis);
+        currentspeed = 1000 * wheelCircumf2 / (millis() - lastwheelmillis);
       }
 
-      distance2 = distance2 + wheelCircumf;  // distance travelled in metres
+      distance2 = distance2 + wheelCircumf2;  // distance travelled in metres
       distance = distance1 + distance2;
       avespeed = distance / (timeElapsed / 1000.0);
 

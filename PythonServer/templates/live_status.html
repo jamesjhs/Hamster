@@ -155,12 +155,10 @@
   <script>
   (function () {
     // ── Constants ──────────────────────────────────────────────────────────────
-    // These match the ESP32 firmware's hard-coded reference diameter and the
-    // server's configured wheel diameters.  /api/config provides the real values
-    // which override these defaults on first load.
+    // These match the physical wheel diameters.  /api/config provides the real
+    // values which override these defaults on first load.
     const WHEEL1_DIAM_CM      = 30;    // big wheel
     const WHEEL2_DIAM_CM      = 14;    // small wheel
-    const ESP32_BASE_DIAM_CM  = 13.5;  // firmware reference diameter
     const TIME_PAUSE_MS       = 10000; // ESP32 considers > 10 s a stop
 
     let w1Diam = WHEEL1_DIAM_CM;

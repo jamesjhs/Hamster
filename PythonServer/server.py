@@ -44,12 +44,32 @@ CSV_DIR    = Path(os.environ.get('CSV_DIR', '/var/hamsterlogger'))
 BIRTH_DATE = datetime(2025, 9, 7, tzinfo=timezone.utc)
 
 # Wheel diameter configuration (cm).  Set WHEEL1_DIAMETER_CM / WHEEL2_DIAMETER_CM
-# environment variables when the physical wheels differ from the ESP32 firmware's
-# reference diameter (13.5 cm).  Defaults reflect the new cage fitted on
-# CAGE_UPGRADE_DATE: Wheel 1 is the big wheel (30 cm), Wheel 2 the small wheel
-# (14 cm).  The poller applies a proportional correction to the metres reported
-# by the ESP32, which always computes distance based on the 13.5 cm reference.
-_ESP32_BASE_DIAM_CM  = 13.5   # diameter (cm) hard-coded in the ESP32 firmware
+# environment variables when the physical wheels differ from the diameters the
+# ESP32 firmware uses for its distance and speed calculations.
+#
+# Calibration logic
+# -----------------
+# The ESP32 firmware accumulates distance and computes speed from the time
+# between consecutive wheel-sensor pulses, using a hard-coded circumference per
+# wheel:
+#
+#   circumference (m) = π × diameter (cm) / 100
+#   distance per rev  = circumference
+#   speed (m/s)       = circumference / (pulse_interval_ms / 1000)
+#
+# When the firmware's assumed diameter matches the physical wheel, no Python-side
+# correction is needed (factor = 1).  When they differ – e.g. because the cage
+# was upgraded and the firmware hasn't been reflashed – the Python poller scales
+# the reported distances by ``actual_diam / firmware_diam`` to recover the true
+# distance.
+#
+# _ESP32_BASE_DIAM1_CM / _ESP32_BASE_DIAM2_CM are the diameters (cm) that the
+# currently running ESP32 firmware uses for Wheel 1 and Wheel 2 respectively.
+# Defaults match the updated firmware that uses per-wheel circumferences (30 cm
+# big wheel, 14 cm small wheel).  If the firmware still uses the original single
+# reference (13.5 cm for both wheels), set both env vars to 13.5.
+_ESP32_BASE_DIAM1_CM = float(os.environ.get('ESP32_BASE_DIAM1_CM', 30.0))
+_ESP32_BASE_DIAM2_CM = float(os.environ.get('ESP32_BASE_DIAM2_CM', 14.0))
 WHEEL1_DIAMETER_CM   = float(os.environ.get('WHEEL1_DIAMETER_CM', 30.0))
 WHEEL2_DIAMETER_CM   = float(os.environ.get('WHEEL2_DIAMETER_CM', 14.0))
 
@@ -154,6 +174,35 @@ def get_esp32_data(fresh=False):
     h = raw['humanYears']
     raw['hamsterYears'] = (
         -1.3415 * h ** 4 + 15.678 * h ** 3 - 54.837 * h ** 2 + 92.659 * h + 2.3173
+    )
+
+    # Apply per-wheel diameter correction to live distances so that every
+    # consumer of this cache (home page, live-status page, /api/live) sees
+    # the same true metres as the CSV log.  When the firmware already uses
+    # the physical wheel diameters the correction factor is 1 (pass-through).
+    raw['distance1'] = _correct_wheel_distance(
+        raw.get('distance1', 0.0), WHEEL1_DIAMETER_CM, _ESP32_BASE_DIAM1_CM
+    )
+    raw['distance2'] = _correct_wheel_distance(
+        raw.get('distance2', 0.0), WHEEL2_DIAMETER_CM, _ESP32_BASE_DIAM2_CM
+    )
+
+    # Correct maxspeed using the last-active wheel as the diameter reference.
+    # avespeed is a cross-wheel running average computed by the firmware and
+    # cannot be reliably corrected here without per-wheel time breakdown; it
+    # is left as-is and should be treated as approximate when base diameters
+    # differ from the physical sizes.
+    wheel_num_last = round(raw.get('wheelNumberLast', 1))
+    if wheel_num_last not in (1, 2):
+        wheel_num_last = 1  # guard against corrupted / missing value
+    speed_base_diam = (
+        _ESP32_BASE_DIAM1_CM if wheel_num_last == 1 else _ESP32_BASE_DIAM2_CM
+    )
+    speed_actual_diam = (
+        WHEEL1_DIAMETER_CM if wheel_num_last == 1 else WHEEL2_DIAMETER_CM
+    )
+    raw['maxspeed'] = raw.get('maxspeed', 0.0) * (
+        speed_actual_diam / speed_base_diam
     )
 
     with _cache_lock:
@@ -298,19 +347,28 @@ _daily_max    = [0.0, 0.0, 0.0, 0.0, 0.0]
 _daily_offset = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 
-def _correct_wheel_distance(raw_m, actual_diam_cm):
+def _correct_wheel_distance(raw_m, actual_diam_cm, base_diam_cm):
     """Scale an ESP32 wheel distance (metres) to account for a different wheel diameter.
 
     The ESP32 firmware computes distance by multiplying revolution count by a
-    circumference calculated from the hard-coded reference diameter
-    (``_ESP32_BASE_DIAM_CM`` = 13.5 cm).  When the physical wheel is larger or
-    smaller, the reported metres are proportionally wrong.  This function
-    corrects by scaling: ``raw_m × (actual_diam_cm / _ESP32_BASE_DIAM_CM)``.
+    circumference derived from ``base_diam_cm`` – the diameter hard-coded in the
+    firmware for that wheel.  When the physical wheel is a different size the
+    reported metres are proportionally wrong.  This function corrects by scaling:
+    ``raw_m × (actual_diam_cm / base_diam_cm)``.
 
-    Example: big wheel (30 cm) → correction factor 30 / 13.5 ≈ 2.22,
-    so 100 m reported by the ESP32 becomes 222 m of true distance.
+    When the firmware already uses the correct physical diameter for that wheel
+    (i.e. ``actual_diam_cm == base_diam_cm``) the factor is exactly 1 and the
+    raw value is returned unchanged – no double-correction occurs.
+
+    Examples:
+
+    * Old firmware (single 13.5 cm reference) + big wheel (30 cm):
+      100 m reported → 100 × (30 / 13.5) ≈ 222 m true distance.
+
+    * Updated firmware (per-wheel circumferences, big wheel = 30 cm):
+      100 m reported → 100 × (30 / 30) = 100 m (pass-through, already correct).
     """
-    return raw_m * (actual_diam_cm / _ESP32_BASE_DIAM_CM)
+    return raw_m * (actual_diam_cm / base_diam_cm)
 
 
 def _poll_esp32():
@@ -376,11 +434,13 @@ def _poll_esp32():
     )
 
     # ── Diameter correction ────────────────────────────────────────────────────
-    # The ESP32 reports distances in metres, computed using its hard-coded 13.5 cm
-    # reference diameter.  Apply a proportional correction for each wheel's
-    # actual diameter.  Motion counts are already in seconds; no conversion needed.
-    d1_m = _correct_wheel_distance(eff_d1, WHEEL1_DIAMETER_CM)
-    d2_m = _correct_wheel_distance(eff_d2, WHEEL2_DIAMETER_CM)
+    # The ESP32 reports distances in metres computed using the per-wheel diameter
+    # hard-coded in the firmware (_ESP32_BASE_DIAM1_CM / _ESP32_BASE_DIAM2_CM).
+    # Scale to the true physical diameter for each wheel.  When the firmware
+    # already uses the physical diameter the correction factor is 1 (no-op).
+    # Motion counts are already in seconds; no conversion needed.
+    d1_m = _correct_wheel_distance(eff_d1, WHEEL1_DIAMETER_CM, _ESP32_BASE_DIAM1_CM)
+    d2_m = _correct_wheel_distance(eff_d2, WHEEL2_DIAMETER_CM, _ESP32_BASE_DIAM2_CM)
     m1_s = eff_m1   # motion counts are already in seconds
     m2_s = eff_m2
     m3_s = eff_m3
@@ -980,23 +1040,25 @@ def api_config():
     marks the boundary between legacy (old cage) and current labelling.
 
     Response JSON:
-      wheel1DiameterCm    – configured diameter for wheel 1 / big wheel (cm)
-      wheel2DiameterCm    – configured diameter for wheel 2 / small wheel (cm)
-      wheel1CircumfM      – circumference for wheel 1 (metres)
-      wheel2CircumfM      – circumference for wheel 2 (metres)
-      esp32BaseDiameterCm – reference diameter hard-coded in ESP32 firmware (cm)
-      upgradeDate         – YYYY-MM-DD from which the new cage config applies;
-                            analytics data before this date uses legacy labels
+      wheel1DiameterCm     – configured actual diameter for wheel 1 / big wheel (cm)
+      wheel2DiameterCm     – configured actual diameter for wheel 2 / small wheel (cm)
+      wheel1CircumfM       – true circumference for wheel 1 (metres)
+      wheel2CircumfM       – true circumference for wheel 2 (metres)
+      esp32BaseDiam1Cm     – diameter hard-coded in ESP32 firmware for wheel 1 (cm)
+      esp32BaseDiam2Cm     – diameter hard-coded in ESP32 firmware for wheel 2 (cm)
+      upgradeDate          – YYYY-MM-DD from which the new cage config applies;
+                             analytics data before this date uses legacy labels
     """
     w1_c = math.pi * WHEEL1_DIAMETER_CM
     w2_c = math.pi * WHEEL2_DIAMETER_CM
     return jsonify({
-        'wheel1DiameterCm':    WHEEL1_DIAMETER_CM,
-        'wheel2DiameterCm':    WHEEL2_DIAMETER_CM,
-        'wheel1CircumfM':      round(w1_c / 100, 6),
-        'wheel2CircumfM':      round(w2_c / 100, 6),
-        'esp32BaseDiameterCm': _ESP32_BASE_DIAM_CM,
-        'upgradeDate':         CAGE_UPGRADE_DATE,
+        'wheel1DiameterCm':  WHEEL1_DIAMETER_CM,
+        'wheel2DiameterCm':  WHEEL2_DIAMETER_CM,
+        'wheel1CircumfM':    round(w1_c / 100, 6),
+        'wheel2CircumfM':    round(w2_c / 100, 6),
+        'esp32BaseDiam1Cm':  _ESP32_BASE_DIAM1_CM,
+        'esp32BaseDiam2Cm':  _ESP32_BASE_DIAM2_CM,
+        'upgradeDate':       CAGE_UPGRADE_DATE,
     })
 
 

@@ -7,33 +7,34 @@
 </head>
 <body>
 <h1>Chocolate's Monitor</h1>
+<p><i>{{ kindle_quote }}</i></p>
 <p><b>Updated:</b> {{ now_str }}</p>
 <hr>
 <h2>Today</h2>
 <ul>
-  <li>Big Wheel distance: {{ "%.2f"|format(today_wheel1) }} m</li>
-  <li>Small Wheel distance: {{ "%.2f"|format(today_wheel2) }} m</li>
-  <li><b>Total distance: {{ "%.2f"|format(today_dist) }} m ({{ today_mi }} miles)</b></li>
-  <li>Max speed: {{ "%.2f"|format(esp32.maxspeed or 0) }} m/s</li>
-  <li>Average speed: {{ "%.2f"|format(esp32.avespeed or 0) }} m/s</li>
-  <li>Under Cover active: {{ "%.1f"|format(today_motion1) }} s</li>
-  <li>Open-space active: {{ "%.1f"|format(today_motion2) }} s</li>
-  <li>Mezzanine active: {{ "%.1f"|format(today_motion3) }} s</li>
-  <li>Total active: {{ "%.1f"|format(today_motion1 + today_motion2 + today_motion3) }} s</li>
+  <li>Big Wheel distance: {{ today_wheel1_km }}</li>
+  <li>Small Wheel distance: {{ today_wheel2_km }}</li>
+  <li><b>Total distance: {{ today_dist_km }}</b></li>
+  <li>Max speed: {{ maxspeed }} m/s</li>
+  <li>Average speed: {{ avespeed }} m/s</li>
+  <li>Under Cover active: {{ today_motion1_fmt }}</li>
+  <li>Open-space active: {{ today_motion2_fmt }}</li>
+  <li>Mezzanine active: {{ today_motion3_fmt }}</li>
+  <li>Total active: {{ today_motion_total_fmt }}</li>
 </ul>
 <h2>All Time</h2>
 <ul>
-  <li>Big Wheel total: {{ "%.2f"|format(lt_summary.totalWheel1 + today_wheel1) }} m</li>
-  <li>Small Wheel total: {{ "%.2f"|format(lt_summary.totalWheel2 + today_wheel2) }} m</li>
-  <li><b>Total distance: {{ "%.2f"|format(total_dist) }} m ({{ total_mi }} miles)</b></li>
-  <li>Under Cover total: {{ "%.1f"|format(lt_summary.totalMotion1 + today_motion1) }} s</li>
-  <li>Open-space total: {{ "%.1f"|format(lt_summary.totalMotion2 + today_motion2) }} s</li>
-  <li>Mezzanine total: {{ "%.1f"|format(lt_summary.totalMotion3 + today_motion3) }} s</li>
+  <li>Big Wheel total: {{ lt_wheel1_km }}</li>
+  <li>Small Wheel total: {{ lt_wheel2_km }}</li>
+  <li><b>Total distance: {{ total_dist_km }}</b></li>
+  <li>Under Cover total: {{ lt_motion1_fmt }}</li>
+  <li>Open-space total: {{ lt_motion2_fmt }}</li>
+  <li>Mezzanine total: {{ lt_motion3_fmt }}</li>
 </ul>
 <h2>Status</h2>
 <ul>
   <li>Last seen: {{ last_time }} on {{ esp32.lastLocation or 'unknown' }}</li>
-  <li>{{ esp32.lastActiveMinsAgo or '?' }} minutes ago</li>
+  <li>{{ last_seen_ago }}</li>
 </ul>
 <hr>
 <p><small>hamster.jahosi.co.uk | auto-refreshes every 60 s</small></p>

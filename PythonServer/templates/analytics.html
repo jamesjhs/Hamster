@@ -3,7 +3,11 @@
 {% block title %}Chocolate's Monitor – Analytics{% endblock %}
 
 {% block content %}
-  <h1 class="text-3xl font-bold text-hamster-800 mb-6">📊 Analytics</h1>
+  <h1 class="text-3xl font-bold text-hamster-800 mb-1">📊 Analytics</h1>
+  <p class="text-hamster-500 text-sm mb-6">
+    Age: <strong>{{ "%.2f"|format(human_years or 0) }} human years</strong>
+    &nbsp;({{ "%.1f"|format(hamster_years or 0) }} hamster years)
+  </p>
 
   <!-- Controls panel -->
   <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5 mb-6">

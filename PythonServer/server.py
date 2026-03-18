@@ -34,7 +34,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
 
@@ -286,6 +286,96 @@ def load_blog_posts():
     return posts
 
 
+# ─── Formatting Helpers ────────────────────────────────────────────────────────
+
+def _fmt_secs(secs):
+    """Format a duration in seconds as a human-readable string (e.g. '1h 30m 5s')."""
+    secs = max(0, int(secs))
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    if h:
+        return f'{h}h {m}m {s}s'
+    elif m:
+        return f'{m}m {s}s'
+    else:
+        return f'{s}s'
+
+
+def _fmt_dist_km(meters):
+    """Format a distance in metres as 'X.XX km (Y.YYY mi)'."""
+    km = meters / 1000.0
+    mi = meters * 0.000621371
+    return f'{km:.2f} km ({mi:.3f} mi)'
+
+
+def _last_seen_str(mins_ago):
+    """Format a 'minutes ago' integer as a human-readable elapsed-time string."""
+    if mins_ago is None:
+        return 'unknown'
+    mins_ago = max(0, int(mins_ago))
+    if mins_ago == 0:
+        return 'just now'
+    if mins_ago < 60:
+        return f'{mins_ago} min ago'
+    h = mins_ago // 60
+    m = mins_ago % 60
+    if m == 0:
+        return f'{h}h ago'
+    return f'{h}h {m} min ago'
+
+
+# ─── Kindle Easter-Egg Quotes ─────────────────────────────────────────────────
+
+_MINECRAFT_QUOTES = [
+    "That's my diamond sword.",
+    "Water bucket, release!",
+    "I think we're in Wyoming.",
+    "Be There and Be Square.",
+    "I... am Steve.",
+    "First we mine, then we craft. LET'S MINECRAFT!",
+    "It's harder to create than to destroy, that's why cowards tend to pick the deuce.",
+    "The Orb Of Dominance: The Most Powerful Cube-Shaped Orb In Existence.",
+    "No... That's A Legend.",
+    "Two Loose Cannons, Wearing Turquoise Blouses.",
+    "I Am Ordering You To Make A Full Man Sandwich!",
+    "\"Are You Finished?\" \"No, I Think He's Swedish, But We're Done With Our Meal.\"",
+    "When Marlene's Jeep Grand Cherokee Ran Me Over, I Was Struck By A Love So Powerful, "
+    "It Transcended The Barriers Of Conventional Speech.",
+    "Everyone Wants To Sue Me Once I Hit Them With My Jeep Grand Cherokee.",
+    "We Are Not In Idaho Anymore, I Think This Is Wyoming.",
+    "CHICKEN JOCKEY!",
+    "They LOVE crushing a loaf.",
+    "FLINT AND STEEL!",
+    "Steve's Lava Chicken, yeah, it's tasty as hell.",
+    "Coming in hot!",
+]
+
+
+def _kindle_quote():
+    """Return a deterministic-per-day quote from the Minecraft movie list."""
+    day_of_year = datetime.now().timetuple().tm_yday
+    return _MINECRAFT_QUOTES[day_of_year % len(_MINECRAFT_QUOTES)]
+
+
+# ─── Age Calculation ───────────────────────────────────────────────────────────
+
+def _calc_age():
+    """Return (human_years, hamster_years) for Chocolate based on BIRTH_DATE."""
+    now_dt = datetime.now(timezone.utc)
+    diff_sec = (now_dt - BIRTH_DATE).total_seconds()
+    secs_per_year = 365.25 * 24 * 3600
+    human_years = diff_sec / secs_per_year
+    hamster_years = (
+        -1.3415 * human_years ** 4
+        + 15.678 * human_years ** 3
+        - 54.837 * human_years ** 2
+        + 92.659 * human_years
+        + 2.3173
+    )
+    return human_years, hamster_years
+
+
 # ─── Background Poller ─────────────────────────────────────────────────────────
 
 _last_poll_hour = -1
@@ -429,38 +519,23 @@ def _poller_loop():
 
 @app.route('/')
 def index():
-    esp32 = get_esp32_data()
-    lt = get_longterm_summary()
+    return redirect(url_for('analytics'))
+
+
+@app.route('/gallery')
+def gallery():
     images = load_images()
-
-    today_dist = esp32.get('distance1', 0) + esp32.get('distance2', 0)
-    total_dist = lt['totalWheel1'] + lt['totalWheel2'] + today_dist
-    last_ts = esp32.get('lastActiveTs', time.time() * 1000) / 1000
-    last_active_time = datetime.fromtimestamp(last_ts).strftime('%H:%M:%S')
-    today_motion = (
-        esp32.get('motion1count', 0)
-        + esp32.get('motion2count', 0)
-        + esp32.get('motion3count', 0)
-    )
-
-    return render_template(
-        'index.html',
-        esp32=esp32,
-        lt_summary=lt,
-        images=images,
-        today_dist_km=f'{today_dist / 1000:.2f}',
-        total_dist_km=f'{total_dist / 1000:.2f}',
-        today_dist_mi=f'{today_dist * 0.000621371:.2f}',
-        total_dist_mi=f'{total_dist * 0.000621371:.2f}',
-        last_active_time=last_active_time,
-        today_motion=f'{today_motion:.1f}',
-        has_history=(lt['totalWheel1'] + lt['totalWheel2']) > 0,
-    )
+    return render_template('gallery.html', images=images)
 
 
 @app.route('/analytics')
 def analytics():
-    return render_template('analytics.html')
+    human_years, hamster_years = _calc_age()
+    return render_template(
+        'analytics.html',
+        human_years=human_years,
+        hamster_years=hamster_years,
+    )
 
 
 @app.route('/blog')
@@ -495,22 +570,38 @@ def kindle():
 
     today_dist = today_wheel1 + today_wheel2
     total_dist = lt['totalWheel1'] + lt['totalWheel2'] + today_dist
+    lt_wheel1  = lt['totalWheel1'] + today_wheel1
+    lt_wheel2  = lt['totalWheel2'] + today_wheel2
     last_ts = esp32.get('lastActiveTs', time.time() * 1000) / 1000
+    mins_ago = esp32.get('lastActiveMinsAgo')
     return render_template(
         'kindle.html',
         esp32=esp32,
         lt_summary=lt,
-        today_wheel1=today_wheel1,
-        today_wheel2=today_wheel2,
-        today_motion1=today_motion1,
-        today_motion2=today_motion2,
-        today_motion3=today_motion3,
-        today_dist=today_dist,
-        total_dist=total_dist,
-        today_mi=f'{today_dist * 0.000621371:.3f}',
-        total_mi=f'{total_dist * 0.000621371:.3f}',
+        # Distances: km (mi)
+        today_wheel1_km=_fmt_dist_km(today_wheel1),
+        today_wheel2_km=_fmt_dist_km(today_wheel2),
+        today_dist_km=_fmt_dist_km(today_dist),
+        lt_wheel1_km=_fmt_dist_km(lt_wheel1),
+        lt_wheel2_km=_fmt_dist_km(lt_wheel2),
+        total_dist_km=_fmt_dist_km(total_dist),
+        # Motion times: human-readable
+        today_motion1_fmt=_fmt_secs(today_motion1),
+        today_motion2_fmt=_fmt_secs(today_motion2),
+        today_motion3_fmt=_fmt_secs(today_motion3),
+        today_motion_total_fmt=_fmt_secs(today_motion1 + today_motion2 + today_motion3),
+        lt_motion1_fmt=_fmt_secs(lt['totalMotion1'] + today_motion1),
+        lt_motion2_fmt=_fmt_secs(lt['totalMotion2'] + today_motion2),
+        lt_motion3_fmt=_fmt_secs(lt['totalMotion3'] + today_motion3),
+        # Speed
+        maxspeed=f'{esp32.get("maxspeed", 0):.2f}',
+        avespeed=f'{esp32.get("avespeed", 0):.2f}',
+        # Last seen
         last_time=datetime.fromtimestamp(last_ts).strftime('%H:%M:%S'),
+        last_seen_ago=_last_seen_str(mins_ago),
         now_str=datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+        # Easter egg
+        kindle_quote=_kindle_quote(),
     )
 
 

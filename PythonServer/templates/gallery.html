@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Chocolate's Monitor – Photo Gallery{% endblock %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold text-hamster-800 mb-6">📸 Photo Gallery</h1>
+
+  {% if images %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      {% for img in images %}
+        <div class="bg-white rounded-xl overflow-hidden shadow-sm border border-hamster-100 cursor-pointer"
+             onclick="openLightbox('{{ img.filename|e }}','{{ (img.description or '')|e }}')">
+          <div class="aspect-square overflow-hidden bg-hamster-100">
+            <img src="/static/images/{{ (img.thumb or img.filename)|e }}"
+                 alt="{{ (img.description or 'Chocolate')|e }}"
+                 class="gallery-img w-full h-full object-cover" loading="lazy">
+          </div>
+          <div class="p-2">
+            <p class="text-xs text-hamster-700 leading-snug line-clamp-2">{{ (img.description or '')|e }}</p>
+            {% if img.date %}
+              <p class="text-xs text-hamster-400 mt-0.5">{{ img.date|e }}</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-hamster-400 italic text-sm">
+      No images yet — add entries to <code class="bg-hamster-100 px-1 rounded">images.json</code>
+      and place photos in <code class="bg-hamster-100 px-1 rounded">static/images/</code>.
+    </p>
+  {% endif %}
+
+  <!-- Lightbox -->
+  <div id="lightbox"
+       class="fixed inset-0 bg-black/80 z-50 items-center justify-center"
+       style="display:none" onclick="closeLightbox()">
+    <div class="max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
+      <div class="bg-white rounded-xl overflow-hidden shadow-2xl">
+        <img id="lbImg" src="" alt="" class="w-full object-contain max-h-[70vh]">
+        <div class="p-4 flex items-start justify-between gap-4">
+          <p id="lbCaption" class="text-hamster-700 text-sm flex-1"></p>
+          <button onclick="closeLightbox()"
+                  class="text-xs text-hamster-400 underline hover:text-hamster-700 shrink-0">Close ✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function openLightbox(filename, desc) {
+      document.getElementById('lbImg').src = '/static/images/' + filename;
+      document.getElementById('lbCaption').textContent = desc;
+      document.getElementById('lightbox').style.display = 'flex';
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').style.display = 'none';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+  </script>
+{% endblock %}

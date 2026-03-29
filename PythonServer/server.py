@@ -57,6 +57,8 @@ WHEEL2_DIAMETER_CM   = float(os.environ.get('WHEEL2_DIAMETER_CM', 14.0))
 # wheels, renamed sensor positions) took effect.  Data before this date is
 # labelled with the original cage terminology in the UI.
 CAGE_UPGRADE_DATE = os.environ.get('CAGE_UPGRADE_DATE', '2026-03-15')
+SERVICE_NAME = os.environ.get('SERVICE_NAME', 'hamster')
+SERVICE_VERSION = os.environ.get('SERVICE_VERSION', '1.0.0')
 
 # ─── App ───────────────────────────────────────────────────────────────────────
 
@@ -1108,6 +1110,16 @@ def api_status():
         'dailyFileCount': len(daily_files),
         'cacheAgeMs': cache_age,
         'esp32Cached': cached,
+    })
+
+
+@app.route('/readyz')
+def readyz():
+    return jsonify({
+        'ok': True,
+        'service': SERVICE_NAME,
+        'version': SERVICE_VERSION,
+        'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     })
 
 

@@ -24,6 +24,8 @@ const CERT_DIR = process.env.CERT_DIR || __dirname;
 const ESP32_BASE_DIAM_CM = 13.5;
 const WHEEL1_DIAMETER_CM = parseFloat(process.env.WHEEL1_DIAMETER_CM || '30');
 const WHEEL2_DIAMETER_CM = parseFloat(process.env.WHEEL2_DIAMETER_CM || '14');
+const SERVICE_NAME       = process.env.SERVICE_NAME || 'hamster';
+const SERVICE_VERSION    = process.env.SERVICE_VERSION || require('./package.json').version || '1.0.0';
 
 // Date of cage upgrade (YYYY-MM-DD); analytics labels differ before/after.
 const CAGE_UPGRADE_DATE = process.env.CAGE_UPGRADE_DATE || '2026-03-15';
@@ -453,6 +455,16 @@ app.get('/api/status', (_req, res) => {
     esp32Ip: ESP32_IP,
     cacheAgeMs: esp32Cache ? Date.now() - esp32CacheAt : null,
     esp32Cached: esp32Cache !== null,
+  });
+});
+
+// API – readiness heartbeat for uptime checks
+app.get('/readyz', (_req, res) => {
+  res.json({
+    ok: true,
+    service: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    timestamp: new Date().toISOString(),
   });
 });
 

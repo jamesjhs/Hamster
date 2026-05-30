@@ -296,18 +296,18 @@ function rateLimit(req, res, next) {
 app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
-app.get('/favicon.ico', (_req, res, next) => {
-  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-  res.sendFile(FAVICON_FILE, (err) => {
-    if (!err) return;
-    if (err.code === 'ENOENT') {
-      res.setHeader('Cache-Control', 'public, max-age=300');
-      return res.sendFile(FALLBACK_FAVICON_FILE, (fallbackErr) => {
-        if (fallbackErr) next(fallbackErr);
-      });
-    }
-    next(err);
-  });
+app.get('/favicon.ico', (_req, res) => {
+  const faviconPath = fs.existsSync(FAVICON_FILE)
+    ? FAVICON_FILE
+    : (fs.existsSync(FALLBACK_FAVICON_FILE) ? FALLBACK_FAVICON_FILE : null);
+
+  if (!faviconPath) {
+    return res.status(204).set('Cache-Control', 'no-store').end();
+  }
+
+  const isCanonical = faviconPath === FAVICON_FILE;
+  res.setHeader('Cache-Control', isCanonical ? 'public, max-age=604800, immutable' : 'public, max-age=300');
+  return res.sendFile(faviconPath);
 });
 
 app.get('/manifest.webmanifest', (_req, res) => {

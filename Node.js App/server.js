@@ -11,6 +11,8 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const MANIFEST_FILE = path.join(PUBLIC_DIR, 'manifest.json');
 const FAVICON_FILE = path.join(PUBLIC_DIR, 'favicon.ico');
 const FALLBACK_FAVICON_FILE = path.join(PUBLIC_DIR, 'icons', 'icon-192.png');
+const CANONICAL_FAVICON_MAX_AGE_S = 604800;
+const FALLBACK_FAVICON_MAX_AGE_S = 300;
 const SERVICE_WORKER_FILE = path.join(PUBLIC_DIR, 'sw.js');
 
 // ─── Trust proxy (required when running behind Nginx + Cloudflare Tunnel) ─────
@@ -297,17 +299,30 @@ app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.get('/favicon.ico', (_req, res) => {
-  const faviconPath = fs.existsSync(FAVICON_FILE)
-    ? FAVICON_FILE
-    : (fs.existsSync(FALLBACK_FAVICON_FILE) ? FALLBACK_FAVICON_FILE : null);
+  const sendFavicon = (filePath, cacheControl, onMissing) => {
+    res.setHeader('Cache-Control', cacheControl);
+    return res.sendFile(filePath, (err) => {
+      if (!err || res.headersSent) return;
+      if (err.code === 'ENOENT') {
+        return onMissing();
+      }
+      if (err.code === 'EACCES') {
+        return res.status(403).end();
+      }
+      console.warn(`favicon sendFile failed (${err.code || 'unknown'}): ${filePath}`);
+      return res.status(500).end();
+    });
+  };
 
-  if (!faviconPath) {
-    return res.status(204).set('Cache-Control', 'no-store').end();
-  }
-
-  const isCanonical = faviconPath === FAVICON_FILE;
-  res.setHeader('Cache-Control', isCanonical ? 'public, max-age=604800, immutable' : 'public, max-age=300');
-  return res.sendFile(faviconPath);
+  return sendFavicon(
+    FAVICON_FILE,
+    `public, max-age=${CANONICAL_FAVICON_MAX_AGE_S}, immutable`,
+    () => sendFavicon(
+      FALLBACK_FAVICON_FILE,
+      `public, max-age=${FALLBACK_FAVICON_MAX_AGE_S}`,
+      () => res.status(204).set('Cache-Control', 'no-store').end(),
+    ),
+  );
 });
 
 app.get('/manifest.webmanifest', (_req, res) => {

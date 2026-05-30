@@ -293,7 +293,7 @@ app.use(rateLimit);
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, filePath) {
-    if (filePath.endsWith(`${path.sep}manifest.json`)) {
+    if (filePath.replace(/\\/g, '/').endsWith('/manifest.json')) {
       res.type('application/manifest+json');
     }
   },
@@ -561,7 +561,6 @@ function layout(title, bodyContent) {
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
-  <link rel="shortcut icon" href="/favicon.ico">
   <meta name="theme-color" content="#923717">
   <!-- iOS PWA support -->
   <meta name="mobile-web-app-capable" content="yes">

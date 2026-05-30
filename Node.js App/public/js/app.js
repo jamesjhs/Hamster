@@ -90,10 +90,12 @@ if ('serviceWorker' in navigator) {
       if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
         deferredInstallPrompt.userChoice
+          .then(function () {
+            deferredInstallPrompt = null;
+            updateInstallButtons();
+          })
           .catch(function (err) {
             console.warn('Install prompt was interrupted:', err);
-          })
-          .finally(function () {
             deferredInstallPrompt = null;
             updateInstallButtons();
           });

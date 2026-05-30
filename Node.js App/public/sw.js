@@ -1,7 +1,7 @@
 'use strict';
 /* eslint-env serviceworker */
 
-const CACHE_NAME = 'hamster-app-shell-v2';
+const CACHE_NAME = 'hamster-app-shell-v3';
 
 // Static assets that should be pre-cached on install
 const PRECACHE_URLS = [

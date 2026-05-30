@@ -86,12 +86,17 @@ if ('serviceWorker' in navigator) {
   });
 
   installButtons.forEach(function (button) {
-    button.addEventListener('click', async function () {
+    button.addEventListener('click', function () {
       if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice.catch(function () {});
-        deferredInstallPrompt = null;
-        updateInstallButtons();
+        deferredInstallPrompt.userChoice
+          .catch(function (err) {
+            console.warn('Install prompt was interrupted:', err);
+          })
+          .finally(function () {
+            deferredInstallPrompt = null;
+            updateInstallButtons();
+          });
         return;
       }
 

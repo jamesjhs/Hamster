@@ -72,11 +72,11 @@ function getPixel(canvas, w, x, y) {
 }
 
 /** Filled circle using anti-aliased coverage (Wu-style soft edge). */
-function fillCircle(canvas, w, cx, cy, radius, r, g, b) {
+function fillCircle(canvas, w, h, cx, cy, radius, r, g, b) {
   const x0 = Math.max(0, Math.floor(cx - radius - 1));
   const x1 = Math.min(w - 1, Math.ceil(cx + radius + 1));
   const y0 = Math.max(0, Math.floor(cy - radius - 1));
-  const y1 = Math.min(w - 1, Math.ceil(cy + radius + 1));
+  const y1 = Math.min(h - 1, Math.ceil(cy + radius + 1));
   for (let py = y0; py <= y1; py++) {
     for (let px = x0; px <= x1; px++) {
       const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
@@ -97,11 +97,11 @@ function fillCircle(canvas, w, cx, cy, radius, r, g, b) {
 }
 
 /** Filled ellipse. */
-function fillEllipse(canvas, w, cx, cy, rx, ry, r, g, b) {
+function fillEllipse(canvas, w, h, cx, cy, rx, ry, r, g, b) {
   const x0 = Math.max(0, Math.floor(cx - rx - 1));
   const x1 = Math.min(w - 1, Math.ceil(cx + rx + 1));
   const y0 = Math.max(0, Math.floor(cy - ry - 1));
-  const y1 = Math.min(w - 1, Math.ceil(cy + ry + 1));
+  const y1 = Math.min(h - 1, Math.ceil(cy + ry + 1));
   for (let py = y0; py <= y1; py++) {
     for (let px = x0; px <= x1; px++) {
       const d = ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2;
@@ -153,33 +153,33 @@ function drawHamster(size, pad = 0) {
   const ar = (fr) => fr * s;
 
   // ── Outer ears (fur colour) ──
-  fillCircle(canvas, size, ax(0.26), ay(0.18), ar(0.14), ...COL.fur);
-  fillCircle(canvas, size, ax(0.74), ay(0.18), ar(0.14), ...COL.fur);
+  fillCircle(canvas, size, size, ax(0.26), ay(0.18), ar(0.14), ...COL.fur);
+  fillCircle(canvas, size, size, ax(0.74), ay(0.18), ar(0.14), ...COL.fur);
 
   // ── Inner ears (cheek pink) ──
-  fillCircle(canvas, size, ax(0.26), ay(0.18), ar(0.08), ...COL.ear);
-  fillCircle(canvas, size, ax(0.74), ay(0.18), ar(0.08), ...COL.ear);
+  fillCircle(canvas, size, size, ax(0.26), ay(0.18), ar(0.08), ...COL.ear);
+  fillCircle(canvas, size, size, ax(0.74), ay(0.18), ar(0.08), ...COL.ear);
 
   // ── Round head (fur) ──
-  fillCircle(canvas, size, ax(0.5), ay(0.52), ar(0.42), ...COL.fur);
+  fillCircle(canvas, size, size, ax(0.5), ay(0.52), ar(0.42), ...COL.fur);
 
   // ── Face patch (cream oval) ──
-  fillEllipse(canvas, size, ax(0.5), ay(0.56), ar(0.29), ar(0.34), ...COL.face);
+  fillEllipse(canvas, size, size, ax(0.5), ay(0.56), ar(0.29), ar(0.34), ...COL.face);
 
   // ── Cheek pouches ──
-  fillEllipse(canvas, size, ax(0.24), ay(0.64), ar(0.18), ar(0.15), ...COL.cheek);
-  fillEllipse(canvas, size, ax(0.76), ay(0.64), ar(0.18), ar(0.15), ...COL.cheek);
+  fillEllipse(canvas, size, size, ax(0.24), ay(0.64), ar(0.18), ar(0.15), ...COL.cheek);
+  fillEllipse(canvas, size, size, ax(0.76), ay(0.64), ar(0.18), ar(0.15), ...COL.cheek);
 
   // ── Eyes ──
-  fillCircle(canvas, size, ax(0.38), ay(0.48), ar(0.06), ...COL.eye);
-  fillCircle(canvas, size, ax(0.62), ay(0.48), ar(0.06), ...COL.eye);
+  fillCircle(canvas, size, size, ax(0.38), ay(0.48), ar(0.06), ...COL.eye);
+  fillCircle(canvas, size, size, ax(0.62), ay(0.48), ar(0.06), ...COL.eye);
 
   // ── Eye highlights (tiny white dot) ──
-  fillCircle(canvas, size, ax(0.395), ay(0.465), ar(0.02), 255, 255, 255);
-  fillCircle(canvas, size, ax(0.635), ay(0.465), ar(0.02), 255, 255, 255);
+  fillCircle(canvas, size, size, ax(0.395), ay(0.465), ar(0.02), 255, 255, 255);
+  fillCircle(canvas, size, size, ax(0.635), ay(0.465), ar(0.02), 255, 255, 255);
 
   // ── Nose ──
-  fillEllipse(canvas, size, ax(0.5), ay(0.60), ar(0.055), ar(0.04), ...COL.nose);
+  fillEllipse(canvas, size, size, ax(0.5), ay(0.60), ar(0.055), ar(0.04), ...COL.nose);
 
   return canvas;
 }
@@ -276,7 +276,7 @@ console.log(`✓  ${icoPath}`);
 const pwaIcons = [
   { name: 'icon-192.png',          size: 192, pad: 0    },
   { name: 'icon-512.png',          size: 512, pad: 0    },
-  { name: 'icon-512-maskable.png', size: 512, pad: 0.1  }, // 10 % safe zone
+  { name: 'icon-512-maskable.png', size: 512, pad: 0.1  }, // 10% safe zone
   { name: 'apple-touch-icon.png',  size: 180, pad: 0    },
 ];
 

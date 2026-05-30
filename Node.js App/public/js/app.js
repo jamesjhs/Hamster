@@ -89,6 +89,7 @@ if ('serviceWorker' in navigator) {
   }
 
   window.addEventListener('beforeinstallprompt', function (event) {
+    event.preventDefault();
     deferredInstallPrompt = event;
     updateInstallButtons();
   });
@@ -128,7 +129,7 @@ if ('serviceWorker' in navigator) {
         return;
       }
 
-      window.alert('To install Hamster in Chrome on desktop, use the address-bar install icon or open the browser menu and choose "Install Chocolate\'s Monitor".');
+      window.alert('To install Hamster in Chrome on desktop, use the address-bar install icon or open the browser menu and choose "Install app".');
     });
   });
 

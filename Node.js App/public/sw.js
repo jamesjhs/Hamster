@@ -1,11 +1,12 @@
 'use strict';
 /* eslint-env serviceworker */
 
-const CACHE_NAME = 'hamster-v1';
+const CACHE_NAME = 'hamster-v2';
 
 // Static assets that should be pre-cached on install
 const PRECACHE_URLS = [
   '/manifest.json',
+  '/favicon.ico',
   '/css/styles.css',
   '/js/app.js',
   '/js/analytics.js',
@@ -57,7 +58,8 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/css/')  ||
     url.pathname.startsWith('/js/')   ||
     url.pathname.startsWith('/icons/') ||
-    url.pathname === '/manifest.json'
+    url.pathname === '/manifest.json' ||
+    url.pathname === '/favicon.ico'
   ) {
     event.respondWith(
       caches.match(request).then((cached) => {

@@ -291,7 +291,13 @@ function rateLimit(req, res, next) {
 app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(`${path.sep}manifest.json`)) {
+      res.type('application/manifest+json');
+    }
+  },
+}));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -553,8 +559,12 @@ function layout(title, bodyContent) {
   <title>${esc(title)}</title>
   <!-- PWA manifest and theme -->
   <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="shortcut icon" href="/favicon.ico">
   <meta name="theme-color" content="#923717">
   <!-- iOS PWA support -->
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Hamster">
@@ -577,6 +587,10 @@ function layout(title, bodyContent) {
         <a href="/analytics"   class="hover:text-hamster-200 transition-colors">Analytics</a>
         <a href="/live-status" class="hover:text-hamster-200 transition-colors">Live</a>
         <a href="/kindle"      class="hover:text-hamster-200 transition-colors">Kindle</a>
+        <button type="button" data-install-app hidden
+                style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25);cursor:pointer;padding:8px 12px;border-radius:999px;color:inherit;font:inherit">
+          Install app
+        </button>
       </div>
       <!-- Hamburger button (hidden on large screens) -->
       <button id="navToggle" aria-label="Toggle menu"
@@ -601,6 +615,10 @@ function layout(title, bodyContent) {
         <a href="/analytics"   style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Analytics</a>
         <a href="/live-status" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Live</a>
         <a href="/kindle"      style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Kindle</a>
+        <button type="button" data-install-app hidden
+                style="margin-top:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);cursor:pointer;padding:10px 8px;border-radius:6px;color:inherit;font:inherit;text-align:left">
+          Install app
+        </button>
       </div>
     </div>
   </nav>

@@ -35,15 +35,15 @@
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <button onclick="setPreset(1)"
+        <button id="presetToday" onclick="setPreset(1)"
                 class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Today</button>
-        <button onclick="setPreset(7)"
+        <button id="presetLast7" onclick="setPreset(7)"
                 class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Last 7d</button>
-        <button onclick="setPreset(30)"
+        <button id="presetLast30" onclick="setPreset(30)"
                 class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Last 30d</button>
-        <button onclick="setPreset(0)"
+        <button id="presetAllTime" onclick="setPreset(0)"
                 class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">All time</button>
-        <button onclick="loadData()"
+        <button id="applyBtn" onclick="loadData()"
                 class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-4 py-2 rounded-lg font-semibold transition-colors">Apply ↵</button>
       </div>
     </div>
@@ -289,7 +289,7 @@
 
   <!-- Collapsible data table -->
   <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
-    <button onclick="toggleTable()"
+    <button id="tableToggleBtn" onclick="toggleTable()"
             class="flex items-center gap-2 font-bold text-hamster-700 hover:text-hamster-900 transition-colors w-full text-left">
       <span id="tableToggleIcon" class="w-4 inline-block">▶</span>
       <span>Data Table</span>
@@ -313,6 +313,6 @@
     </div>
   </div>
 
-  <script src="/static/js/chart.umd.min.js"></script>
-  <script src="/static/js/analytics.js?v=6"></script>
+  <script src="/js/chart.umd.min.js"></script>
+  <script src="/js/analytics.js?v=6"></script>
 {% endblock %}

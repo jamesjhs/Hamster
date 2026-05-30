@@ -171,6 +171,16 @@ sudo systemctl start hamster
 sudo journalctl -u hamster -f   # follow logs
 ```
 
+For day-to-day Raspberry Pi management, use the `hamster` systemd service:
+
+```bash
+sudo systemctl start hamster
+sudo systemctl stop hamster
+sudo systemctl restart hamster
+sudo systemctl status hamster --no-pager
+sudo journalctl -u hamster -n 50 --no-pager
+```
+
 ### Running on startup (Windows Task Scheduler)
 
 1. Open **Task Scheduler** (search for it in the Start menu).

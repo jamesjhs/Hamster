@@ -7,6 +7,8 @@ const path    = require('path');
 const express = require('express');
 
 const app = express();
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const MANIFEST_FILE = path.join(PUBLIC_DIR, 'manifest.json');
 
 // ─── Trust proxy (required when running behind Nginx + Cloudflare Tunnel) ─────
 app.set('trust proxy', 1);
@@ -291,9 +293,9 @@ function rateLimit(req, res, next) {
 app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public'), {
+app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
-    if (filePath.replace(/\\/g, '/').endsWith('/manifest.json')) {
+    if (path.resolve(filePath) === MANIFEST_FILE) {
       res.type('application/manifest+json');
     }
   },

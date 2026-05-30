@@ -90,7 +90,10 @@ if ('serviceWorker' in navigator) {
       if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
         deferredInstallPrompt.userChoice
-          .then(function () {
+          .then(function (choice) {
+            if (choice && choice.outcome) {
+              console.info('Install prompt outcome:', choice.outcome);
+            }
             deferredInstallPrompt = null;
             updateInstallButtons();
           })

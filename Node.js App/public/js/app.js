@@ -66,16 +66,29 @@ if ('serviceWorker' in navigator) {
     return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
   }
 
+  function isChromiumBrowser() {
+    return /chrome|chromium|crios|edg|opr\//i.test(window.navigator.userAgent)
+      && !/firefox|fxios/i.test(window.navigator.userAgent);
+  }
+
+  function getInstallButtonLabel() {
+    return deferredInstallPrompt ? 'Install app' : 'How to install';
+  }
+
+  function canShowInstallHelp() {
+    return isIOS() || isChromiumBrowser();
+  }
+
   function updateInstallButtons() {
-    var shouldShow = !isStandalone() && (!!deferredInstallPrompt || isIOS());
+    var shouldShow = !isStandalone() && canShowInstallHelp();
     installButtons.forEach(function (button) {
       button.hidden = !shouldShow;
-      button.disabled = !deferredInstallPrompt && !isIOS();
+      button.disabled = false;
+      button.textContent = getInstallButtonLabel();
     });
   }
 
   window.addEventListener('beforeinstallprompt', function (event) {
-    event.preventDefault();
     deferredInstallPrompt = event;
     updateInstallButtons();
   });
@@ -107,7 +120,15 @@ if ('serviceWorker' in navigator) {
 
       if (isIOS()) {
         window.alert('To install Hamster, tap Share and then "Add to Home Screen".');
+        return;
       }
+
+      if (/android/i.test(window.navigator.userAgent)) {
+        window.alert('To install Hamster in Chrome, open the browser menu and tap "Add to Home screen".');
+        return;
+      }
+
+      window.alert('To install Hamster in Chrome on desktop, use the address-bar install icon or open the browser menu and choose "Install Chocolate\'s Monitor".');
     });
   });
 

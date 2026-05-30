@@ -9,6 +9,7 @@ const express = require('express');
 const app = express();
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MANIFEST_FILE = path.join(PUBLIC_DIR, 'manifest.json');
+const FAVICON_FILE = path.join(PUBLIC_DIR, 'favicon.ico');
 
 // ─── Trust proxy (required when running behind Nginx + Cloudflare Tunnel) ─────
 app.set('trust proxy', 1);
@@ -293,6 +294,12 @@ function rateLimit(req, res, next) {
 app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
+app.get('/favicon.ico', (_req, res, next) => {
+  res.sendFile(FAVICON_FILE, (err) => {
+    if (err) next(err);
+  });
+});
+
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
     if (path.resolve(filePath) === MANIFEST_FILE) {
@@ -627,7 +634,7 @@ function layout(title, bodyContent) {
     ${bodyContent}
   </main>
   <footer class="bg-hamster-800 text-hamster-200 text-center text-xs py-3 mt-auto">
-    Chocolate &bull; Russian Dwarf Hamster &bull; hamster.jahosi.co.uk
+    Chocolate &bull; Russian Dwarf Hamster &bull; hamster.jahosi.co.uk &bull; v${esc(SERVICE_VERSION)}
   </footer>
   <script src="/js/app.js"></script>
 </body>

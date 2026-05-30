@@ -1,6 +1,7 @@
 {
   "name": "Chocolate's Monitor",
   "short_name": "Hamster",
+  "id": "/",
   "description": "Live monitoring dashboard for Chocolate the hamster",
   "start_url": "/",
   "display": "standalone",

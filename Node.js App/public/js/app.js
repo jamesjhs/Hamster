@@ -50,3 +50,66 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+// ── Install prompt handling ────────────────────────────────────────────────────
+(function () {
+  var deferredInstallPrompt = null;
+  var installButtons = Array.prototype.slice.call(document.querySelectorAll('[data-install-app]'));
+
+  if (!installButtons.length) return;
+
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  function isIOS() {
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  }
+
+  function updateInstallButtons() {
+    var shouldShow = !isStandalone() && (!!deferredInstallPrompt || isIOS());
+    installButtons.forEach(function (button) {
+      button.hidden = !shouldShow;
+      button.disabled = !deferredInstallPrompt && !isIOS();
+    });
+  }
+
+  window.addEventListener('beforeinstallprompt', function (event) {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateInstallButtons();
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredInstallPrompt = null;
+    updateInstallButtons();
+  });
+
+  installButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice
+          .then(function (choice) {
+            if (choice && choice.outcome) {
+              console.info('Install prompt outcome:', choice.outcome);
+            }
+            deferredInstallPrompt = null;
+            updateInstallButtons();
+          })
+          .catch(function (err) {
+            console.warn('Install prompt was interrupted:', err);
+            deferredInstallPrompt = null;
+            updateInstallButtons();
+          });
+        return;
+      }
+
+      if (isIOS()) {
+        window.alert('To install Hamster, tap Share and then "Add to Home Screen".');
+      }
+    });
+  });
+
+  updateInstallButtons();
+})();

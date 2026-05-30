@@ -7,8 +7,9 @@
     "start": "node server.js",
     "build:css": "npx tailwindcss -i ./src/input.css -o ./public/css/styles.css --minify",
     "watch:css": "npx tailwindcss -i ./src/input.css -o ./public/css/styles.css --watch",
+    "build:icons": "node scripts/generate-icons.js",
     "build:chartjs": "cp node_modules/chart.js/dist/chart.umd.min.js public/js/chart.umd.min.js",
-    "build": "npm run build:css && npm run build:chartjs"
+    "build": "npm run build:css && npm run build:chartjs && npm run build:icons"
   },
   "engines": {
     "node": ">=18"

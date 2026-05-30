@@ -7,6 +7,10 @@ const path    = require('path');
 const express = require('express');
 
 const app = express();
+
+// ─── Trust proxy (required when running behind Nginx + Cloudflare Tunnel) ─────
+app.set('trust proxy', 1);
+
 app.use(express.json());
 
 // ─── Configuration ────────────────────────────────────────────────────────────
@@ -228,6 +232,65 @@ function loadImages() {
   }
 }
 
+// ─── Security middleware ───────────────────────────────────────────────────────
+
+// Content Security Policy.
+// All inline <script> and onclick= attributes have been eliminated; every
+// script is loaded from 'self', so script-src needs no unsafe-inline.
+// Inline style= attributes remain (Tailwind/layout), so style-src keeps
+// 'unsafe-inline'; this is low-risk as there is no user-supplied style input.
+const CSP =
+  "default-src 'self'; " +
+  "script-src 'self'; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; " +
+  "font-src 'self'; " +
+  "connect-src 'self'; " +
+  "frame-ancestors 'none';";
+
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy',     CSP);
+  res.setHeader('X-Content-Type-Options',      'nosniff');
+  res.setHeader('X-Frame-Options',             'DENY');
+  res.setHeader('Referrer-Policy',             'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy',          'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
+// Simple in-memory rate limiter for API endpoints (no external dependency).
+// Limits each IP to RATE_LIMIT_MAX requests per RATE_LIMIT_WINDOW_MS.
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX       = 120;    // 120 requests / IP / min
+const _rateLimitStore      = new Map();
+
+function rateLimit(req, res, next) {
+  const ip  = req.ip || 'unknown';
+  const now = Date.now();
+  let entry = _rateLimitStore.get(ip);
+  if (!entry || now > entry.reset) {
+    entry = { count: 1, reset: now + RATE_LIMIT_WINDOW_MS };
+  } else {
+    entry.count += 1;
+  }
+  _rateLimitStore.set(ip, entry);
+
+  // Prune stale entries when the map grows large to prevent memory leaks
+  if (_rateLimitStore.size > 10_000) {
+    for (const [k, v] of _rateLimitStore) {
+      if (now > v.reset) _rateLimitStore.delete(k);
+    }
+  }
+
+  if (entry.count > RATE_LIMIT_MAX) {
+    res.setHeader('Retry-After', Math.ceil((entry.reset - now) / 1000));
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  next();
+}
+
+app.use('/api',    rateLimit);
+app.use('/readyz', rateLimit);
+
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -441,18 +504,17 @@ app.get('/api/heatmap', (req, res) => {
 
 
 // API – system status (useful for debugging CSV path issues)
+// Internal details (esp32Ip, csvDir full path) are omitted to avoid info disclosure.
 app.get('/api/status', (_req, res) => {
-  const longtermPath = path.join(CSV_DIR, 'longtermlog.csv');
+  const longtermPath   = path.join(CSV_DIR, 'longtermlog.csv');
   const longtermExists = fs.existsSync(longtermPath);
   const longtermRows   = longtermExists ? readCSV(longtermPath).length : 0;
   const dailyFiles     = listCSVFiles();
   res.json({
-    csvDir: CSV_DIR,
     longtermlogExists: longtermExists,
     longtermlogRows: longtermRows,
     dailyFileCount: dailyFiles.length,
     dailyFiles,
-    esp32Ip: ESP32_IP,
     cacheAgeMs: esp32Cache ? Date.now() - esp32CacheAt : null,
     esp32Cached: esp32Cache !== null,
   });
@@ -490,6 +552,14 @@ function layout(title, bodyContent) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${esc(title)}</title>
+  <!-- PWA manifest and theme -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#923717">
+  <!-- iOS PWA support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Hamster">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/styles.css">
   <style>
     .gallery-img { transition: transform 0.2s; }
@@ -511,9 +581,7 @@ function layout(title, bodyContent) {
       </div>
       <!-- Hamburger button (hidden on large screens) -->
       <button id="navToggle" aria-label="Toggle menu"
-              style="background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:inherit"
-              onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'"
-              onmouseleave="this.style.backgroundColor='transparent'">
+              style="background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:inherit">
         <svg id="navIconHam" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
           <line x1="3" y1="6"  x2="21" y2="6"/>
@@ -530,49 +598,20 @@ function layout(title, bodyContent) {
     <!-- Mobile dropdown menu -->
     <div id="mobileMenu" style="display:none;background:#782f16;border-top:1px solid rgba(255,255,255,0.15)">
       <div class="max-w-6xl mx-auto px-4 py-2" style="display:flex;flex-direction:column;gap:2px">
-        <a href="/"            style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Home</a>
-        <a href="/analytics"   style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Analytics</a>
-        <a href="/live-status" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Live</a>
-        <a href="/kindle"      style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none" onmouseenter="this.style.backgroundColor='rgba(255,255,255,0.1)'" onmouseleave="this.style.backgroundColor='transparent'">Kindle</a>
+        <a href="/"            style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Home</a>
+        <a href="/analytics"   style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Analytics</a>
+        <a href="/live-status" style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Live</a>
+        <a href="/kindle"      style="display:block;padding:10px 8px;border-radius:6px;font-size:.875rem;font-weight:500;color:inherit;text-decoration:none">Kindle</a>
       </div>
     </div>
   </nav>
-  <script>
-    (function () {
-      var toggle   = document.getElementById('navToggle');
-      var menu     = document.getElementById('mobileMenu');
-      var navLinks = document.getElementById('navLinks');
-      var iconHam  = document.getElementById('navIconHam');
-      var iconX    = document.getElementById('navIconX');
-
-      function applyLayout() {
-        if (window.innerWidth >= 768) {
-          navLinks.style.display = 'flex';
-          toggle.style.display   = 'none';
-          menu.style.display     = 'none';
-        } else {
-          navLinks.style.display = 'none';
-          toggle.style.display   = 'block';
-        }
-      }
-
-      toggle.addEventListener('click', function () {
-        var open = menu.style.display === 'none' || menu.style.display === '';
-        menu.style.display    = open ? 'block' : 'none';
-        iconHam.style.display = open ? 'none'  : 'block';
-        iconX.style.display   = open ? 'block' : 'none';
-      });
-
-      applyLayout();
-      window.addEventListener('resize', applyLayout);
-    })();
-  </script>
   <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
     ${bodyContent}
   </main>
   <footer class="bg-hamster-800 text-hamster-200 text-center text-xs py-3 mt-auto">
     Chocolate &bull; Russian Dwarf Hamster &bull; hamster.jahosi.co.uk
   </footer>
+  <script src="/js/app.js"></script>
 </body>
 </html>`;
 }
@@ -602,7 +641,8 @@ function renderIndex({
     ? `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         ${images.map((img) => `
           <div class="bg-white rounded-xl overflow-hidden shadow-sm border border-hamster-100 cursor-pointer"
-               onclick="openLightbox('${esc(img.filename)}','${esc(img.description || '')}')">
+               data-lightbox-filename="${esc(img.filename)}"
+               data-lightbox-desc="${esc(img.description || '')}">
             <div class="aspect-square overflow-hidden bg-hamster-100">
               <img src="/images/${esc(img.thumb || img.filename)}"
                    alt="${esc(img.description || 'Chocolate')}"
@@ -663,7 +703,7 @@ function renderIndex({
       </div>
       <p class="text-xs text-hamster-400 mt-5">
         Data cached for 30 s. &nbsp;
-        <a href="javascript:location.reload()" class="underline hover:text-hamster-600">Refresh now</a>
+        <button type="button" class="js-reload underline hover:text-hamster-600 text-xs text-hamster-400">Refresh now</button>
         &nbsp;·&nbsp;
         <a href="/analytics" class="underline hover:text-hamster-600">View full analytics →</a>
       </p>
@@ -681,29 +721,19 @@ function renderIndex({
     <!-- Lightbox -->
     <div id="lightbox"
          class="fixed inset-0 bg-black/80 z-50 items-center justify-center"
-         style="display:none" onclick="closeLightbox()">
-      <div class="max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
+         style="display:none">
+      <div id="lbInner" class="max-w-3xl w-full mx-4">
         <div class="bg-white rounded-xl overflow-hidden shadow-2xl">
           <img id="lbImg" src="" alt="" class="w-full object-contain max-h-[70vh]">
           <div class="p-4 flex items-start justify-between gap-4">
             <p id="lbCaption" class="text-hamster-700 text-sm flex-1"></p>
-            <button onclick="closeLightbox()"
+            <button id="lbClose"
                     class="text-xs text-hamster-400 underline hover:text-hamster-700 shrink-0">Close ✕</button>
           </div>
         </div>
       </div>
     </div>
-    <script>
-      function openLightbox(filename, desc) {
-        document.getElementById('lbImg').src = '/images/' + filename;
-        document.getElementById('lbCaption').textContent = desc;
-        document.getElementById('lightbox').style.display = 'flex';
-      }
-      function closeLightbox() {
-        document.getElementById('lightbox').style.display = 'none';
-      }
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
-    </script>
+    <script src="/js/lightbox.js"></script>
   `);
 }
 
@@ -737,15 +767,15 @@ function renderAnalytics() {
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <button onclick="setPreset(1)"
+          <button id="presetToday"
                   class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Today</button>
-          <button onclick="setPreset(7)"
+          <button id="presetLast7"
                   class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Last 7d</button>
-          <button onclick="setPreset(30)"
+          <button id="presetLast30"
                   class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">Last 30d</button>
-          <button onclick="setPreset(0)"
+          <button id="presetAllTime"
                   class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors">All time</button>
-          <button onclick="loadData()"
+          <button id="applyBtn"
                   class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-4 py-2 rounded-lg font-semibold transition-colors">Apply ↵</button>
         </div>
       </div>
@@ -813,9 +843,9 @@ function renderAnalytics() {
       <div class="flex flex-wrap items-center gap-4 mb-3">
         <h3 class="font-bold text-hamster-700 text-sm uppercase tracking-wide flex-1">Activity Heatmap</h3>
         <div class="flex gap-2">
-          <button id="heatmapBtnDistance" onclick="setHeatmapMetric('distance')"
+          <button id="heatmapBtnDistance"
                   class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">Distance (m)</button>
-          <button id="heatmapBtnActivity" onclick="setHeatmapMetric('activity')"
+          <button id="heatmapBtnActivity"
                   class="bg-hamster-100 hover:bg-hamster-200 text-hamster-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">Activity (s)</button>
         </div>
       </div>
@@ -839,7 +869,7 @@ function renderAnalytics() {
 
     <!-- Collapsible data table -->
     <div class="bg-white rounded-xl shadow-sm border border-hamster-100 p-5">
-      <button onclick="toggleTable()"
+      <button id="tableToggleBtn"
               class="flex items-center gap-2 font-bold text-hamster-700 hover:text-hamster-900 transition-colors w-full text-left">
         <span id="tableToggleIcon" class="w-4 inline-block">▶</span>
         <span>Data Table</span>
@@ -880,7 +910,7 @@ function renderLiveStatus() {
       <div class="flex items-center gap-3">
         <span id="statusDot" class="inline-block w-3 h-3 rounded-full bg-hamster-300"></span>
         <span id="statusText" class="text-xs text-hamster-500 font-medium">Connecting…</span>
-        <button onclick="fetchNow()" class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">
+        <button id="refreshBtn" class="bg-hamster-700 hover:bg-hamster-800 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">
           Refresh ↺
         </button>
       </div>
@@ -1017,141 +1047,7 @@ function renderLiveStatus() {
     <p class="text-xs text-hamster-400 text-center">
       Updates every 5 seconds by querying the ESP32 directly.
     </p>
-
-    <script>
-    (function () {
-      const WHEEL1_DIAM_CM = 30;
-      const WHEEL2_DIAM_CM = 14;
-      const TIME_PAUSE_MS  = 10000;
-
-      let w1Diam = WHEEL1_DIAM_CM;
-      let w2Diam = WHEEL2_DIAM_CM;
-
-      function fmt1(n)   { return Number(n).toFixed(1); }
-      function fmt2(n)   { return Number(n).toFixed(2); }
-      function fmtMs(s)  {
-        const mins = Math.floor(s / 60);
-        const secs = Math.round(s % 60);
-        return mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
-      }
-
-      function calcRPM(lwm) {
-        if (lwm <= 0 || lwm >= TIME_PAUSE_MS) return 0;
-        return 60000 / lwm;
-      }
-
-      function calcSpeed(lwm, diamCm) {
-        if (lwm <= 0 || lwm >= TIME_PAUSE_MS) return 0;
-        return (Math.PI * diamCm / 100) / (lwm / 1000);
-      }
-
-      function setBadge(id, active) {
-        var el = document.getElementById(id);
-        if (active) {
-          el.textContent = 'RUNNING';
-          el.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700';
-        } else {
-          el.textContent = 'IDLE';
-          el.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-hamster-100 text-hamster-400';
-        }
-      }
-
-      function setText(id, val) { document.getElementById(id).textContent = val; }
-
-      function render(d) {
-        var lwm        = d.lastwheelmillis || 0;
-        var wheelLast  = Math.round(d.wheelNumberLast || 1);
-        var wheelActive = lwm > 0 && lwm < TIME_PAUSE_MS;
-        var w1Active   = wheelActive && wheelLast === 1;
-        var w2Active   = wheelActive && wheelLast === 2;
-
-        var w1Speed = w1Active ? calcSpeed(lwm, w1Diam) : 0;
-        var w1RPM   = w1Active ? calcRPM(lwm) : 0;
-        setBadge('w1-badge', w1Active);
-        setText('w1-speed',     w1Active ? fmt2(w1Speed) + ' m/s' : '0.00 m/s');
-        setText('w1-speed-kmh', w1Active ? fmt2(w1Speed * 3.6) + ' km/h' : '—');
-        setText('w1-rpm',       w1Active ? fmt1(w1RPM) + ' rpm' : '0 rpm');
-        setText('w1-dist',      fmt2(d.distance1 || 0) + ' m');
-
-        var w2Speed = w2Active ? calcSpeed(lwm, w2Diam) : 0;
-        var w2RPM   = w2Active ? calcRPM(lwm) : 0;
-        setBadge('w2-badge', w2Active);
-        setText('w2-speed',     w2Active ? fmt2(w2Speed) + ' m/s' : '0.00 m/s');
-        setText('w2-speed-kmh', w2Active ? fmt2(w2Speed * 3.6) + ' km/h' : '—');
-        setText('w2-rpm',       w2Active ? fmt1(w2RPM) + ' rpm' : '0 rpm');
-        setText('w2-dist',      fmt2(d.distance2 || 0) + ' m');
-
-        var motionLevels = { 1: 'Level 1 – under cover', 2: 'Level 2 – open-space', 3: 'Level 3 – mezzanine' };
-        var motionLevel  = Math.round(d.motionLevelLast || 0);
-        setText('sensor-location',     d.lastLocation || '—');
-        setText('sensor-motion-level', motionLevel > 0 ? (motionLevels[motionLevel] || 'Level ' + motionLevel) : '—');
-        setText('sensor-wheel-last',   wheelLast === 1 ? 'Wheel 1 (big)' : (wheelLast === 2 ? 'Wheel 2 (small)' : '—'));
-
-        var minsAgo = d.lastActiveMinsAgo;
-        setText('sensor-last-active', minsAgo === 0 ? 'just now' : minsAgo + ' min ago');
-
-        var esp32El = document.getElementById('sensor-esp32');
-        if (d.esp32Online) {
-          esp32El.textContent = 'Online ✓';
-          esp32El.className = 'font-bold text-green-600';
-        } else {
-          esp32El.textContent = 'Offline ✗';
-          esp32El.className = 'font-bold text-red-600';
-        }
-
-        var aveMs = d.avespeed || 0;
-        var maxMs = d.maxspeed || 0;
-        setText('stats-avespeed',     fmt2(aveMs) + ' m/s');
-        setText('stats-avespeed-kmh', '(' + fmt2(aveMs * 3.6) + ' km/h)');
-        setText('stats-maxspeed',     fmt2(maxMs) + ' m/s');
-        setText('stats-maxspeed-kmh', '(' + fmt2(maxMs * 3.6) + ' km/h)');
-        setText('stats-motion1', fmtMs(d.motion1count || 0));
-        setText('stats-motion2', fmtMs(d.motion2count || 0));
-        setText('stats-motion3', fmtMs(d.motion3count || 0));
-
-        var dot  = document.getElementById('statusDot');
-        var text = document.getElementById('statusText');
-        if (d.esp32Online) {
-          dot.className  = 'inline-block w-3 h-3 rounded-full bg-green-500';
-          text.textContent = 'Live · ' + new Date().toLocaleTimeString();
-        } else {
-          dot.className  = 'inline-block w-3 h-3 rounded-full bg-red-500';
-          text.textContent = 'ESP32 offline · ' + new Date().toLocaleTimeString();
-        }
-      }
-
-      async function fetchConfig() {
-        try {
-          var r = await fetch('/api/config');
-          if (!r.ok) return;
-          var cfg = await r.json();
-          if (cfg.wheel1DiameterCm) w1Diam = cfg.wheel1DiameterCm;
-          if (cfg.wheel2DiameterCm) w2Diam = cfg.wheel2DiameterCm;
-        } catch (_) {}
-      }
-
-      async function fetchNow() {
-        var dot  = document.getElementById('statusDot');
-        var text = document.getElementById('statusText');
-        dot.className    = 'inline-block w-3 h-3 rounded-full bg-yellow-400';
-        text.textContent = 'Fetching…';
-        try {
-          var r = await fetch('/api/live-now');
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          var d = await r.json();
-          render(d);
-        } catch (err) {
-          dot.className    = 'inline-block w-3 h-3 rounded-full bg-red-500';
-          text.textContent = 'Error: ' + err.message;
-        }
-      }
-
-      window.fetchNow = fetchNow;
-
-      fetchConfig().then(fetchNow);
-      setInterval(fetchNow, 5000);
-    })();
-    </script>
+    <script src="/js/live-status.js"></script>
   `);
 }
 

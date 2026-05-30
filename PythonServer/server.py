@@ -70,9 +70,9 @@ def _load_service_version():
     if version:
         return version
     try:
-        return (REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip() or '1.1.1'
+        return (REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip() or '1.1.2'
     except OSError:
-        return '1.1.1'
+        return '1.1.2'
 
 
 SERVICE_VERSION = _load_service_version()

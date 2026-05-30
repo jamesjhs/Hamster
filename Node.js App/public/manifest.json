@@ -1,0 +1,44 @@
+{
+  "name": "Chocolate's Monitor",
+  "short_name": "Hamster",
+  "description": "Live monitoring dashboard for Chocolate the hamster",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf8f0",
+  "theme_color": "#923717",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "en-GB",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Status",
+      "url": "/live-status",
+      "description": "Real-time wheel speed and sensor data"
+    },
+    {
+      "name": "Analytics",
+      "url": "/analytics",
+      "description": "Historical activity charts and heatmap"
+    }
+  ]
+}

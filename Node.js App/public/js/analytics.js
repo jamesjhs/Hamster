@@ -31,6 +31,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadData();
   });
 
+  // Wire up preset / control buttons (replaces inline onclick= attributes)
+  const btnBindings = [
+    ['presetToday',   () => setPreset(1)],
+    ['presetLast7',   () => setPreset(7)],
+    ['presetLast30',  () => setPreset(30)],
+    ['presetAllTime', () => setPreset(0)],
+    ['applyBtn',      () => loadData()],
+    ['tableToggleBtn', () => toggleTable()],
+    ['heatmapBtnDistance', () => setHeatmapMetric('distance')],
+    ['heatmapBtnActivity', () => setHeatmapMetric('activity')],
+  ];
+  for (const [id, handler] of btnBindings) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', handler);
+    } else {
+      console.warn('analytics.js: expected element #' + id + ' not found');
+    }
+  }
+
   // Default view: last 30 days on the long-term log. setPreset calls loadData().
   setPreset(30);
 });

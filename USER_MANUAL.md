@@ -728,7 +728,7 @@ Returns the parsed `images.json` array.
 Returns a diagnostic JSON object — useful for debugging when charts are blank or all-time distance looks wrong.
 ```json
 {
-  "csvDir": "/var/www/html/hamsterlogger",
+  "csvDir": "/var/hamsterlogger",
   "longtermlogExists": true,
   "longtermlogRows": 42,
   "dailyFileCount": 5,
@@ -743,18 +743,20 @@ Returns a diagnostic JSON object — useful for debugging when charts are blank 
 
 ## 10. Common Editing Tasks
 
+The active Raspberry Pi deployment uses `/home/pi/Hamster/PythonServer` and is started via the `hamster` systemd service. Use `sudo systemctl restart hamster` after changes that require a restart; the old PM2 / `server.js` commands only apply to `node-deprecated/`.
+
 ### 10.1 Add a New Gallery Photo
 
 1. **Copy the images to the Pi:**
    ```bash
-   scp my-photo.jpg pi@192.168.1.72:/var/node/cert/public/images/
-   scp my-photo-thumb.jpg pi@192.168.1.72:/var/node/cert/public/images/thumbs/
+   scp my-photo.jpg pi@192.168.1.72:/home/pi/Hamster/PythonServer/static/images/
+   scp my-photo-thumb.jpg pi@192.168.1.72:/home/pi/Hamster/PythonServer/static/images/thumbs/
    ```
    Thumbnails should be ≤ 300 px wide. Full-size can be any reasonable size (≤ 2 MB recommended for mobile).
 
 2. **Edit `images.json`** on the Pi:
    ```bash
-   nano /var/node/cert/images.json
+   nano /home/pi/Hamster/PythonServer/images.json
    ```
    Add a new entry to the JSON array:
    ```json
@@ -774,83 +776,101 @@ Returns a diagnostic JSON object — useful for debugging when charts are blank 
 
 ### 10.2 Remove a Gallery Photo
 
-Edit `/var/node/cert/images.json` and delete the corresponding JSON object. The image file itself can be left in `public/images/` (it simply won't appear in the gallery) or deleted:
+Edit `/home/pi/Hamster/PythonServer/images.json` and delete the corresponding JSON object. The image file itself can be left in `static/images/` (it simply won't appear in the gallery) or deleted:
 ```bash
-rm /var/node/cert/public/images/old-photo.jpg
-rm /var/node/cert/public/images/thumbs/old-photo-thumb.jpg
+rm /home/pi/Hamster/PythonServer/static/images/old-photo.jpg
+rm /home/pi/Hamster/PythonServer/static/images/thumbs/old-photo-thumb.jpg
 ```
 
 ---
 
 ### 10.3 Change the Date Range Defaults
 
-The Analytics page defaults to **last 30 days** on load. To change this, edit `server.js` (the `renderAnalytics()` function) and search for `setPreset(30)` in the page's inline HTML, **or** edit `analytics.js`:
+The Analytics page defaults to **today's intraday data** on load. To change this, edit `PythonServer/static/js/analytics.js` and update the `setPreset(...)` call inside the `DOMContentLoaded` handler:
 
 ```js
 // analytics.js, inside DOMContentLoaded:
-setPreset(30);   // ← change to 7, 1, 0, etc.
+setPreset(1);   // ← change to 7, 30, 0, etc.
 ```
 
-After editing, restart the server:
-```bash
-pm2 restart hamster-monitor
-```
+No server restart is required; the browser will pick up the updated static file on the next page load.
 
 ---
 
 ### 10.4 Change Chocolate's Birthday
 
-The birthday controls the age calculation shown on the Home page. Edit `server.js`:
+The birthday controls the age calculation shown on the Home page. Edit `PythonServer/server.py`:
 
-```js
-// Line 22:
-const BIRTH_DATE = new Date('2025-09-07');  // YYYY-MM-DD
+```python
+BIRTH_DATE = datetime(2025, 9, 7, tzinfo=timezone.utc)
 ```
 
-Restart the server after saving.
+Restart the service after saving:
+```bash
+sudo systemctl restart hamster
+```
 
 ---
 
 ### 10.5 Change the ESP32 IP Address
 
-If the ESP32 is assigned a new IP address by the router, update the environment variable (recommended) or the default in `server.js`.
+If the ESP32 is assigned a new IP address by the router, update the `hamster` systemd service environment (recommended) or the fallback default in `PythonServer/server.py`.
 
-**Via PM2 environment variable (no file edit needed):**
+**Via systemd environment variable (recommended):**
 ```bash
-pm2 stop hamster-monitor
-ESP32_IP=192.168.1.55 pm2 start server.js --name hamster-monitor
-pm2 save
+sudo systemctl edit --full hamster
 ```
 
-**Or edit `server.js` line 14:**
-```js
-const ESP32_IP = process.env.ESP32_IP || '192.168.1.98';
+Set or update this line in the `[Service]` block:
+
+```ini
+Environment=ESP32_IP=192.168.1.55
 ```
 
-Also update `datalogger.py` line 42:
+Then reload and restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart hamster
+```
+
+**Or edit `PythonServer/server.py`:**
 ```python
-esp32IP = "192.168.1.55"
+ESP32_IP = os.environ.get('ESP32_IP', '192.168.1.98')
 ```
 
 ---
 
 ### 10.6 Change the CSV Directory
 
-If the Python data logger writes CSVs to a different directory, update the `CSV_DIR` environment variable when starting the Node.js server:
+If the PythonServer logger should write CSVs to a different directory, update the `hamster` systemd service environment:
 ```bash
-CSV_DIR=/path/to/csvs pm2 start server.js --name hamster-monitor
+sudo systemctl edit --full hamster
 ```
 
-Or edit `server.js` line 17:
-```js
-const CSV_DIR = process.env.CSV_DIR || '/var/www/html/hamsterlogger';
+Set or update this line in the `[Service]` block:
+
+```ini
+Environment=CSV_DIR=/path/to/csvs
+```
+
+Then reload and restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart hamster
+```
+
+Or edit the fallback in `PythonServer/server.py`:
+```python
+CSV_DIR = Path(os.environ.get('CSV_DIR', '/var/hamsterlogger'))
 ```
 
 ---
 
 ### 10.7 Change the Polling Interval
 
-Edit `datalogger.py` line 25:
+For the legacy standalone data logger only, edit `datalogger.py` line 25:
 ```python
 delay = 30  # seconds between each ESP32 poll
 ```
@@ -865,14 +885,12 @@ curl http://192.168.1.72/hamsterlogger/startprocess.php
 
 ### 10.8 Renew SSL Certificates
 
-Certificates are typically issued by Let's Encrypt via Certbot. After renewal:
+`PythonServer` does not terminate TLS itself; in the active deployment SSL is handled by nginx and/or Cloudflare in front of the Flask app. After renewing certificates on the Pi, reload nginx:
 ```bash
-# Certbot usually auto-renews and places certs in /etc/letsencrypt/live/<domain>/
-sudo cp /etc/letsencrypt/live/hamster.jahosi.co.uk/cert.pem     /var/node/cert/cert.pem
-sudo cp /etc/letsencrypt/live/hamster.jahosi.co.uk/privkey.pem  /var/node/cert/privkey.pem
-pm2 restart hamster-monitor
+sudo nginx -t
+sudo systemctl reload nginx
 ```
-Or configure a Certbot renewal hook to copy the files and restart automatically.
+If you are still running the deprecated Node.js HTTPS stack, use `node-deprecated/SETUP.md` instead.
 
 ---
 
@@ -936,7 +954,7 @@ Blog posts are stored as a JSON array in `PythonServer/blog.json` on the Pi. Eac
 
 2. **Edit `blog.json`** (PythonServer deployment path):
    ```bash
-   nano /home/pi/hamster/PythonServer/blog.json
+   nano /home/pi/Hamster/PythonServer/blog.json
    ```
 
 3. **Add a new entry** to the JSON array (before or after existing entries — the server sorts by date):
@@ -957,20 +975,20 @@ Blog posts are stored as a JSON array in `PythonServer/blog.json` on the Pi. Eac
 
 ---
 
-### Environment Variables (`server.js`)
+### Environment Variables (`PythonServer/server.py`)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `4000` | TCP port the Node.js server listens on |
+| `PORT` | `4000` | TCP port the Flask app listens on |
 | `ESP32_IP` | `192.168.1.98` | LAN IP address of the ESP32 |
-| `CSV_DIR` | `/var/www/html/hamsterlogger` | Directory where the Python data logger writes CSV files |
-| `CERT_DIR` | `/var/node/cert` | Directory containing `cert.pem` and `privkey.pem` |
+| `CSV_DIR` | `/var/hamsterlogger` | Directory where `PythonServer` reads and writes CSV files |
+| `SERVICE_NAME` | `hamster` | Service label shown by status endpoints and templates |
 
-### Hard-Coded Constants (`server.js`)
+### Hard-Coded Constants (`PythonServer/server.py`)
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `CACHE_TTL_MS` | `30000` | ESP32 data cache lifetime (30 seconds) |
+| `CACHE_TTL` | `30` | ESP32 data cache lifetime (seconds) |
 | `BIRTH_DATE` | `2025-09-07` | Chocolate's birthday (used for age calculation) |
 
 ### Hard-Coded Constants (`datalogger.py`)
@@ -1003,16 +1021,16 @@ Blog posts are stored as a JSON array in `PythonServer/blog.json` on the Pi. Eac
 
 ### The home page shows today's distance but all-time distance is 0
 
-- The Pi data logger may not be running, so `longtermlog.csv` is empty or missing.
-- Check the admin page: `http://192.168.1.72/hamsterlogger/`
-- If the daemon is not running, click START.
+- The `hamster` service may be stopped before it has written `longtermlog.csv`.
+- Check the service status: `sudo systemctl status hamster --no-pager`
+- Check whether the log file exists: `ls /var/hamsterlogger/longtermlog.csv`
 
 ---
 
 ### The analytics charts are blank after loading
 
 - The `CSV_DIR` may not exist or may be empty.
-- Check: `ls /var/www/html/hamsterlogger/`
+- Check: `ls /var/hamsterlogger/`
 - Ensure the data logger has been running for at least one full day so `longtermlog.csv` has entries.
 
 ---
@@ -1033,17 +1051,18 @@ Blog posts are stored as a JSON array in `PythonServer/blog.json` on the Pi. Eac
 
 ### SSL certificate errors in the browser
 
-- The certificate may have expired. Re-issue via Let's Encrypt and copy to `/var/node/cert/`.
+- The certificate may have expired. Re-issue via Let's Encrypt on the nginx host and reload nginx.
 - The domain name on the certificate must match `hamster.jahosi.co.uk`.
-- Check: `openssl x509 -in /var/node/cert/cert.pem -noout -dates`
+- Check the deployed certificate path used by nginx, for example: `openssl x509 -in /etc/letsencrypt/live/hamster.jahosi.co.uk/fullchain.pem -noout -dates`
 
 ---
 
-### The Node.js server crashes on startup
+### The PythonServer service fails to start
 
-- Check for missing `node_modules/`: run `npm install --omit=dev` in `/var/node/cert/`.
-- Check for missing cert files: the server will log a warning and fall back to HTTP — this is normal during development.
-- Check PM2 logs: `pm2 logs hamster-monitor --lines 50`
+- Check the service status: `sudo systemctl status hamster --no-pager`
+- Check recent service logs: `sudo journalctl -u hamster -n 50 --no-pager`
+- Confirm dependencies were installed in the virtual environment: `cd /home/pi/Hamster/PythonServer && . .venv/bin/activate && pip install -r requirements.txt`
+- If you run the app manually instead of via systemd, start it with `python3 /home/pi/Hamster/PythonServer/server.py` and read the traceback directly
 
 ---
 

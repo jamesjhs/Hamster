@@ -301,6 +301,7 @@ app.get('/favicon.ico', (_req, res, next) => {
   res.sendFile(FAVICON_FILE, (err) => {
     if (!err) return;
     if (err.code === 'ENOENT') {
+      res.setHeader('Cache-Control', 'public, max-age=300');
       return res.sendFile(FALLBACK_FAVICON_FILE, (fallbackErr) => {
         if (fallbackErr) next(fallbackErr);
       });

@@ -10,6 +10,8 @@ const app = express();
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MANIFEST_FILE = path.join(PUBLIC_DIR, 'manifest.json');
 const FAVICON_FILE = path.join(PUBLIC_DIR, 'favicon.ico');
+const FALLBACK_FAVICON_FILE = path.join(PUBLIC_DIR, 'icons', 'icon-192.png');
+const SERVICE_WORKER_FILE = path.join(PUBLIC_DIR, 'sw.js');
 
 // ─── Trust proxy (required when running behind Nginx + Cloudflare Tunnel) ─────
 app.set('trust proxy', 1);
@@ -295,15 +297,33 @@ app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.get('/favicon.ico', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
   res.sendFile(FAVICON_FILE, (err) => {
-    if (err) next(err);
+    if (!err) return;
+    if (err.code === 'ENOENT') {
+      return res.sendFile(FALLBACK_FAVICON_FILE, (fallbackErr) => {
+        if (fallbackErr) next(fallbackErr);
+      });
+    }
+    next(err);
   });
+});
+
+app.get('/manifest.webmanifest', (_req, res) => {
+  res.redirect(307, '/manifest.json');
 });
 
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
-    if (path.resolve(filePath) === MANIFEST_FILE) {
+    const resolved = path.resolve(filePath);
+    if (resolved === MANIFEST_FILE) {
       res.type('application/manifest+json');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+    } else if (resolved === SERVICE_WORKER_FILE) {
+      // Ensure updates are picked up quickly so installability fixes roll out.
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
   },
 }));
@@ -1124,7 +1144,7 @@ function renderKindle({ esp32, ltSummary, todayWheel1, todayWheel2, todayMotion1
   <li>${esp32.lastActiveMinsAgo || '?'} minutes ago</li>
 </ul>
 <hr>
-<p><small>hamster.jahosi.co.uk | auto-refreshes every 60 s</small></p>
+<p><small>hamster.jahosi.co.uk | auto-refreshes every 60 s | v${esc(SERVICE_VERSION)}</small></p>
 </body>
 </html>`;
 }

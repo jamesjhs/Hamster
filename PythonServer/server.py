@@ -70,9 +70,9 @@ def _load_service_version():
     if version:
         return version
     try:
-        return (REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip() or '1.1.1'
+        return (REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip() or '1.1.2'
     except OSError:
-        return '1.1.1'
+        return '1.1.2'
 
 
 SERVICE_VERSION = _load_service_version()
@@ -543,24 +543,7 @@ def _poller_loop():
 
 @app.route('/')
 def index():
-    esp32 = get_esp32_data()
-    lt_summary = get_longterm_summary()
-    images = load_images()
-    today_dist = (esp32.get('distance1', 0.0) or 0.0) + (esp32.get('distance2', 0.0) or 0.0)
-    total_dist = lt_summary['totalWheel1'] + lt_summary['totalWheel2'] + today_dist
-    last_active_ts = esp32.get('lastActiveTs', time.time() * 1000) / 1000
-    return render_template(
-        'index.html',
-        esp32=esp32,
-        images=images,
-        lt_summary=lt_summary,
-        today_dist_km=f'{today_dist / 1000:.2f}',
-        total_dist_km=f'{total_dist / 1000:.2f}',
-        today_dist_mi=f'{today_dist * 0.000621371:.2f}',
-        total_dist_mi=f'{total_dist * 0.000621371:.2f}',
-        has_history=(lt_summary['totalWheel1'] + lt_summary['totalWheel2']) > 0,
-        last_active_time=datetime.fromtimestamp(last_active_ts).strftime('%H:%M:%S'),
-    )
+    return redirect(url_for('analytics'))
 
 
 def _send_static_file(directory, filename, cache_control=None, mimetype=None):

@@ -1,5 +1,9 @@
 # Hamster Monitor – Deployment Guide
 
+## Deprecated status
+
+`PythonServer/` is now the supported deployment target. This Node.js guide is kept only so older installs can be understood or migrated.
+
 A Node.js/Express app that replaces the old PHP/NAS gateway stack.  
 It runs directly on the **Raspberry Pi** ("motion") and serves  
 **https://hamster.jahosi.co.uk** on port 4000.
@@ -23,7 +27,7 @@ It runs directly on the **Raspberry Pi** ("motion") and serves
 ```bash
 # On the Pi, as root or a user with write access:
 sudo mkdir -p /var/node/cert
-sudo cp -r "Node.js App/"* /var/node/cert/
+sudo cp -r "node-deprecated/"* /var/node/cert/
 ```
 
 ### 2 – Install dependencies and build assets

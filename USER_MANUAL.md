@@ -30,10 +30,10 @@ The Hamster Monitor is a four-layer IoT system that tracks Chocolate's physical 
 |-------|-----------|------|
 | **Sensor hardware** | DOIT ESP32 DevKit V1 | Reads wheel rotation and motion-sensor events; serves raw data over HTTP |
 | **Data logger** | Python 3 on Raspberry Pi | Polls the ESP32 every 30 seconds and writes cumulative readings to CSV files |
-| **Web server** | Node.js / Express on Raspberry Pi | Reads the CSV files and the live ESP32 feed; renders pages and JSON APIs |
+| **Web server** | Python / Flask on Raspberry Pi | Polls the ESP32, reads CSV files, and serves pages plus JSON APIs from one process |
 | **Public website** | HTML / Tailwind CSS / Chart.js | Browser-rendered pages for live stats, analytics charts, blog, gallery, and Kindle |
 
-The old PHP-based "NAS Gateway" layer (in `NAS Gateway Code/`) pre-dates the Node.js app and is kept for reference. The Node.js app in `Node.js App/` is the **current active system**.
+The old PHP-based "NAS Gateway" layer (in `NAS Gateway Code/`) pre-dates the current Flask deployment and is kept for reference. The active web server now lives in `PythonServer/`. The former Node implementation has been kept in `node-deprecated/` as a deprecated reference only.
 
 ---
 
@@ -259,9 +259,9 @@ The admin page (`Raspberry Pi Code/index.php`) checks whether `killpid.php` exis
 
 ---
 
-## 5. Layer 3 – Node.js Web Application
+## 5. Layer 3 – Deprecated Node.js Web Application
 
-### Files (`Node.js App/`)
+### Files (`node-deprecated/`)
 
 | File / Directory | Purpose |
 |------------------|---------|
@@ -281,7 +281,7 @@ The admin page (`Raspberry Pi Code/index.php`) checks whether `killpid.php` exis
 
 ### Deployment Location on the Pi
 
-All files in `Node.js App/` are copied to `/var/node/cert/` on the Raspberry Pi.  
+All files in `node-deprecated/` are copied to `/var/node/cert/` on the Raspberry Pi.  
 The SSL certificates (`cert.pem`, `privkey.pem`) are placed in the same directory.
 
 ```
@@ -431,7 +431,7 @@ datalogger.py                    ESP32
 | `killpid.php` | _(HTTP request)_ | Kills daemon, deletes `killpid.php` and `pid.php` |
 | `pid.php` | _(HTTP request)_ | Returns daemon PID as plain text |
 
-### Node.js App
+### Deprecated Node.js App
 
 | File | Inputs | Outputs |
 |------|--------|---------|
@@ -443,7 +443,7 @@ datalogger.py                    ESP32
 | `public/images/*.jpg` | _(uploaded manually)_ | Served statically at `/images/<filename>` |
 | `public/images/thumbs/*.jpg` | _(uploaded manually)_ | Served at `/images/thumbs/<filename>` |
 
-### PythonServer
+### PythonServer (active)
 
 | File | Inputs | Outputs |
 |------|--------|---------|
@@ -459,7 +459,7 @@ datalogger.py                    ESP32
 
 ## 8. Back-End Function Reference
 
-All functions below live in `Node.js App/server.js`.
+All functions below live in `node-deprecated/server.js` and are retained only for historical reference.
 
 ---
 

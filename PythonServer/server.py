@@ -25,6 +25,7 @@ Configuration via environment variables:
 import json
 import logging
 import math
+import mimetypes
 import os
 import re
 import time
@@ -34,13 +35,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
 
-PORT       = int(os.environ.get('PORT', 4000))
-ESP32_IP   = os.environ.get('ESP32_IP', '192.168.1.98')
-CSV_DIR    = Path(os.environ.get('CSV_DIR', '/var/hamsterlogger'))
+BASE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BASE_DIR.parent
+STATIC_DIR = BASE_DIR / 'static'
+PORT = int(os.environ.get('PORT', 4000))
+ESP32_IP = os.environ.get('ESP32_IP', '192.168.1.98')
+CSV_DIR = Path(os.environ.get('CSV_DIR', '/var/hamsterlogger'))
 BIRTH_DATE = datetime(2025, 9, 7, tzinfo=timezone.utc)
 
 # Wheel diameter configuration (cm).  Set WHEEL1_DIAMETER_CM / WHEEL2_DIAMETER_CM
@@ -58,11 +62,29 @@ WHEEL2_DIAMETER_CM   = float(os.environ.get('WHEEL2_DIAMETER_CM', 14.0))
 # labelled with the original cage terminology in the UI.
 CAGE_UPGRADE_DATE = os.environ.get('CAGE_UPGRADE_DATE', '2026-03-15')
 SERVICE_NAME = os.environ.get('SERVICE_NAME', 'hamster')
-SERVICE_VERSION = os.environ.get('SERVICE_VERSION', '1.0.0')
+
+
+def _load_service_version():
+    """Read the shared service version for templates and /readyz."""
+    version = os.environ.get('SERVICE_VERSION')
+    if version:
+        return version
+    try:
+        return (REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip() or '1.1.1'
+    except OSError:
+        return '1.1.1'
+
+
+SERVICE_VERSION = _load_service_version()
 
 # ─── App ───────────────────────────────────────────────────────────────────────
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
+
+
+@app.context_processor
+def inject_template_globals():
+    return {'service_version': SERVICE_VERSION}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -521,7 +543,87 @@ def _poller_loop():
 
 @app.route('/')
 def index():
-    return redirect(url_for('analytics'))
+    esp32 = get_esp32_data()
+    lt_summary = get_longterm_summary()
+    images = load_images()
+    today_dist = (esp32.get('distance1', 0.0) or 0.0) + (esp32.get('distance2', 0.0) or 0.0)
+    total_dist = lt_summary['totalWheel1'] + lt_summary['totalWheel2'] + today_dist
+    last_active_ts = esp32.get('lastActiveTs', time.time() * 1000) / 1000
+    return render_template(
+        'index.html',
+        esp32=esp32,
+        images=images,
+        lt_summary=lt_summary,
+        today_dist_km=f'{today_dist / 1000:.2f}',
+        total_dist_km=f'{total_dist / 1000:.2f}',
+        today_dist_mi=f'{today_dist * 0.000621371:.2f}',
+        total_dist_mi=f'{total_dist * 0.000621371:.2f}',
+        has_history=(lt_summary['totalWheel1'] + lt_summary['totalWheel2']) > 0,
+        last_active_time=datetime.fromtimestamp(last_active_ts).strftime('%H:%M:%S'),
+    )
+
+
+def _send_static_file(directory, filename, cache_control=None, mimetype=None):
+    response = send_from_directory(directory, filename, mimetype=mimetype)
+    if cache_control:
+        response.headers['Cache-Control'] = cache_control
+    return response
+
+
+@app.route('/favicon.ico')
+def favicon():
+    if (STATIC_DIR / 'favicon.ico').exists():
+        return _send_static_file(STATIC_DIR, 'favicon.ico', 'public, max-age=604800, immutable')
+    fallback = STATIC_DIR / 'icons' / 'icon-192.png'
+    if fallback.exists():
+        return _send_static_file(fallback.parent, fallback.name, 'public, max-age=300')
+    return ('', 204, {'Cache-Control': 'no-store'})
+
+
+@app.route('/manifest.webmanifest')
+def manifest_webmanifest():
+    return redirect(url_for('manifest_json'), code=307)
+
+
+@app.route('/manifest.json')
+def manifest_json():
+    return _send_static_file(
+        STATIC_DIR,
+        'manifest.json',
+        'public, max-age=300',
+        mimetype='application/manifest+json',
+    )
+
+
+@app.route('/sw.js')
+def service_worker():
+    response = _send_static_file(STATIC_DIR, 'sw.js', mimetype='application/javascript')
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
+@app.route('/css/<path:filename>')
+def css_static(filename):
+    return _send_static_file(STATIC_DIR / 'css', filename, 'public, max-age=300')
+
+
+@app.route('/js/<path:filename>')
+def js_static(filename):
+    return _send_static_file(STATIC_DIR / 'js', filename, 'public, max-age=300')
+
+
+@app.route('/images/<path:filename>')
+def images_static(filename):
+    guessed, _ = mimetypes.guess_type(filename)
+    return _send_static_file(STATIC_DIR / 'images', filename, 'public, max-age=300', guessed)
+
+
+@app.route('/icons/<path:filename>')
+def icons_static(filename):
+    guessed, _ = mimetypes.guess_type(filename)
+    return _send_static_file(STATIC_DIR / 'icons', filename, 'public, max-age=604800, immutable', guessed)
 
 
 @app.route('/gallery')

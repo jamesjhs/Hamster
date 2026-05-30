@@ -100,7 +100,7 @@
     </div>
     <p class="text-xs text-hamster-400 mt-5">
       Auto-refreshes every 60 s. &nbsp;
-      <button type="button" onclick="window.location.reload()" class="underline hover:text-hamster-600 cursor-pointer">Refresh now</button>
+      <button type="button" class="underline hover:text-hamster-600 cursor-pointer js-reload">Refresh now</button>
       &nbsp;·&nbsp;
       <a href="/analytics" class="underline hover:text-hamster-600">View full analytics →</a>
     </p>
@@ -119,9 +119,10 @@
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {% for img in images %}
           <div class="bg-white rounded-xl overflow-hidden shadow-sm border border-hamster-100 cursor-pointer"
-               onclick="openLightbox('{{ img.filename|e }}','{{ (img.description or '')|e }}')">
+               data-lightbox-filename="{{ img.filename|e }}"
+               data-lightbox-desc="{{ (img.description or '')|e }}">
             <div class="aspect-square overflow-hidden bg-hamster-100">
-              <img src="/static/images/{{ (img.thumb or img.filename)|e }}"
+              <img src="/images/{{ (img.thumb or img.filename)|e }}"
                    alt="{{ (img.description or 'Chocolate')|e }}"
                    class="gallery-img w-full h-full object-cover" loading="lazy">
             </div>
@@ -145,27 +146,20 @@
   <!-- Lightbox -->
   <div id="lightbox"
        class="fixed inset-0 bg-black/80 z-50 items-center justify-center"
-       style="display:none" onclick="closeLightbox()">
-    <div class="max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
+       style="display:none">
+    <div id="lbInner" class="max-w-3xl w-full mx-4">
       <div class="bg-white rounded-xl overflow-hidden shadow-2xl">
         <img id="lbImg" src="" alt="" class="w-full object-contain max-h-[70vh]">
         <div class="p-4 flex items-start justify-between gap-4">
           <p id="lbCaption" class="text-hamster-700 text-sm flex-1"></p>
-          <button onclick="closeLightbox()"
+          <button id="lbClose"
                   class="text-xs text-hamster-400 underline hover:text-hamster-700 shrink-0">Close ✕</button>
         </div>
       </div>
     </div>
   </div>
-  <script>
-    function openLightbox(filename, desc) {
-      document.getElementById('lbImg').src = '/static/images/' + filename;
-      document.getElementById('lbCaption').textContent = desc;
-      document.getElementById('lightbox').style.display = 'flex';
-    }
-    function closeLightbox() {
-      document.getElementById('lightbox').style.display = 'none';
-    }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
-  </script>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/js/lightbox.js"></script>
 {% endblock %}

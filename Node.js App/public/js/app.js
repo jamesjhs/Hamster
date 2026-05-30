@@ -67,8 +67,18 @@ if ('serviceWorker' in navigator) {
   }
 
   function isChromiumBrowser() {
+    if (window.navigator.userAgentData && Array.isArray(window.navigator.userAgentData.brands)) {
+      return window.navigator.userAgentData.brands.some(function (brand) {
+        return /chrom|edge|opera/i.test(brand.brand);
+      });
+    }
+
     return /chrome|chromium|crios|edg|opr\//i.test(window.navigator.userAgent)
       && !/firefox|fxios/i.test(window.navigator.userAgent);
+  }
+
+  function isAndroid() {
+    return /android/i.test(window.navigator.userAgent);
   }
 
   function getInstallButtonLabel() {
@@ -76,7 +86,7 @@ if ('serviceWorker' in navigator) {
   }
 
   function canShowInstallHelp() {
-    return isIOS() || isChromiumBrowser();
+    return isIOS() || isChromiumBrowser() || !!deferredInstallPrompt;
   }
 
   function updateInstallButtons() {
@@ -124,7 +134,7 @@ if ('serviceWorker' in navigator) {
         return;
       }
 
-      if (/android/i.test(window.navigator.userAgent)) {
+      if (isAndroid()) {
         window.alert('To install Hamster in Chrome, open the browser menu and tap "Add to Home screen".');
         return;
       }

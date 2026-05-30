@@ -27,10 +27,14 @@ async function precacheUrls() {
     PRECACHE_URLS.map(async (url) => {
       try {
         const response = await fetch(url, { cache: 'no-cache' });
-        if (!response.ok) return;
+        if (!response.ok) {
+          console.warn('Precache skipped for asset:', url, response.status);
+          return;
+        }
         await cache.put(url, response);
-      } catch (_err) {
+      } catch (err) {
         // Best-effort precache: missing assets should not block service-worker install.
+        console.warn('Precache skipped for asset:', url, err);
       }
     }),
   );

@@ -44,7 +44,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   ];
   for (const [id, handler] of btnBindings) {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('click', handler);
+    if (el) {
+      el.addEventListener('click', handler);
+    } else {
+      console.warn('analytics.js: expected element #' + id + ' not found');
+    }
   }
 
   // Default view: last 30 days on the long-term log. setPreset calls loadData().

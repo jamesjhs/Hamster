@@ -257,10 +257,10 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Simple in-memory rate limiter for API endpoints (no external dependency).
+// Simple in-memory rate limiter (no external dependency).
 // Limits each IP to RATE_LIMIT_MAX requests per RATE_LIMIT_WINDOW_MS.
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX       = 120;    // 120 requests / IP / min
+const RATE_LIMIT_MAX       = 60;     // 60 requests / IP / min
 const _rateLimitStore      = new Map();
 
 function rateLimit(req, res, next) {
@@ -274,8 +274,8 @@ function rateLimit(req, res, next) {
   }
   _rateLimitStore.set(ip, entry);
 
-  // Prune stale entries when the map grows large to prevent memory leaks
-  if (_rateLimitStore.size > 10_000) {
+  // Prune stale entries when the map grows to prevent memory leaks
+  if (_rateLimitStore.size > 2_000) {
     for (const [k, v] of _rateLimitStore) {
       if (now > v.reset) _rateLimitStore.delete(k);
     }
@@ -288,8 +288,7 @@ function rateLimit(req, res, next) {
   next();
 }
 
-app.use('/api',    rateLimit);
-app.use('/readyz', rateLimit);
+app.use(rateLimit);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));

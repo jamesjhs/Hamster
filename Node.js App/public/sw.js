@@ -1,10 +1,11 @@
 'use strict';
 /* eslint-env serviceworker */
 
-const CACHE_NAME = 'hamster-v2';
+const CACHE_NAME = 'hamster-app-shell';
 
 // Static assets that should be pre-cached on install
 const PRECACHE_URLS = [
+  '/',
   '/manifest.json',
   '/favicon.ico',
   '/css/styles.css',
@@ -15,15 +16,34 @@ const PRECACHE_URLS = [
   '/js/live-status.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-512-maskable.png',
   '/icons/apple-touch-icon.png',
 ];
+
+async function precacheUrls() {
+  const cache = await caches.open(CACHE_NAME);
+
+  await Promise.all(
+    PRECACHE_URLS.map(async (url) => {
+      try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        if (!response.ok) {
+          console.warn('Precache skipped for asset:', url, response.status);
+          return;
+        }
+        await cache.put(url, response);
+      } catch (err) {
+        // Best-effort precache: missing assets should not block service-worker install.
+        console.warn('Precache skipped for asset:', url, err);
+      }
+    }),
+  );
+}
 
 // ─── Install: pre-cache static assets ────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting()),
+    precacheUrls().then(() => self.skipWaiting()),
   );
 });
 

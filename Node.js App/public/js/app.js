@@ -66,11 +66,35 @@ if ('serviceWorker' in navigator) {
     return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
   }
 
+  function isChromiumBrowser() {
+    if (window.navigator.userAgentData && Array.isArray(window.navigator.userAgentData.brands)) {
+      return window.navigator.userAgentData.brands.some(function (brand) {
+        return /chrom|edge|opera/i.test(brand.brand);
+      });
+    }
+
+    return /chrome|chromium|crios|edg|opr\//i.test(window.navigator.userAgent)
+      && !/firefox|fxios/i.test(window.navigator.userAgent);
+  }
+
+  function isAndroid() {
+    return /android/i.test(window.navigator.userAgent);
+  }
+
+  function getInstallButtonLabel() {
+    return deferredInstallPrompt ? 'Install app' : 'How to install';
+  }
+
+  function canShowInstallHelp() {
+    return isIOS() || isChromiumBrowser() || !!deferredInstallPrompt;
+  }
+
   function updateInstallButtons() {
-    var shouldShow = !isStandalone() && (!!deferredInstallPrompt || isIOS());
+    var shouldShow = !isStandalone() && canShowInstallHelp();
     installButtons.forEach(function (button) {
       button.hidden = !shouldShow;
-      button.disabled = !deferredInstallPrompt && !isIOS();
+      button.disabled = false;
+      button.textContent = getInstallButtonLabel();
     });
   }
 
@@ -107,7 +131,15 @@ if ('serviceWorker' in navigator) {
 
       if (isIOS()) {
         window.alert('To install Hamster, tap Share and then "Add to Home Screen".');
+        return;
       }
+
+      if (isAndroid()) {
+        window.alert('To install Hamster in Chrome, open the browser menu and tap "Add to Home screen".');
+        return;
+      }
+
+      window.alert('To install Hamster in Chrome on desktop, use the address-bar install icon or open the browser menu and choose "Install app".');
     });
   });
 

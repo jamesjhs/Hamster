@@ -18,7 +18,7 @@ Usage::
 Configuration via environment variables:
 
 ``PORT``      HTTP port (default ``4000``)
-``ESP32_IP``  ESP32 device IP address (default ``192.168.1.98``)
+``ESP32_IP``  ESP32 device IP address (default ``192.168.1.224``)
 ``CSV_DIR``   Directory for CSV log files (default ``/var/hamsterlogger``)
 """
 
@@ -43,7 +43,7 @@ BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent
 STATIC_DIR = BASE_DIR / 'static'
 PORT = int(os.environ.get('PORT', 4000))
-ESP32_IP = os.environ.get('ESP32_IP', '192.168.1.98')
+ESP32_IP = os.environ.get('ESP32_IP', '192.168.1.224')
 CSV_DIR = Path(os.environ.get('CSV_DIR', '/var/hamsterlogger'))
 BIRTH_DATE = datetime(2025, 9, 7, tzinfo=timezone.utc)
 
